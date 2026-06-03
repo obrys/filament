@@ -18,13 +18,13 @@ Environment=ConnectionStrings__Filament=Server=filament-db;Port=3306;Database=fi
 # .NET memory tuning for tiny VMs
 Environment=DOTNET_gcServer=0
 Environment=DOTNET_GCConserveMemory=9
-Environment=DOTNET_GCHeapHardLimit=104857600
+Environment=DOTNET_GCHeapHardLimit=134217728
 
 [Service]
 Restart=on-failure
 RestartSec=10
-MemoryHigh=150M
-MemoryMax=180M
+MemoryHigh=250M
+MemoryMax=512M
 
 [Install]
 WantedBy=default.target
