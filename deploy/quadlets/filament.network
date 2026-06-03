@@ -1,0 +1,10 @@
+[Unit]
+Description=Filament internal network
+After=network-online.target
+Wants=network-online.target
+
+[Network]
+NetworkName=filament
+
+[Install]
+WantedBy=default.target

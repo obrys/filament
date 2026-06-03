@@ -1,0 +1,19 @@
+[Unit]
+Description=Filament — Web UI (nginx + SPA)
+Requires=filament-api.service filament.network
+After=filament-api.service filament.network
+
+[Container]
+Image=localhost/filament-web:latest
+ContainerName=filament-web
+Network=filament.network
+PublishPort=8081:8080
+
+[Service]
+Restart=on-failure
+RestartSec=10
+MemoryHigh=20M
+MemoryMax=32M
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,30 @@
+[Unit]
+Description=Filament — .NET 10 API
+Requires=filament-db.service filament.network
+After=filament-db.service filament.network
+
+[Container]
+# This tag is loaded onto the host by deploy/scripts/deploy.sh
+Image=localhost/filament-api:latest
+ContainerName=filament-api
+Network=filament.network
+NetworkAlias=api
+PublishPort=8080:8080
+
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://+:8080
+Environment=ConnectionStrings__Filament=Server=filament-db;Port=3306;Database=filament;User=filament;Password=filament
+
+# .NET memory tuning for tiny VMs
+Environment=DOTNET_gcServer=0
+Environment=DOTNET_GCConserveMemory=9
+Environment=DOTNET_GCHeapHardLimit=104857600
+
+[Service]
+Restart=on-failure
+RestartSec=10
+MemoryHigh=150M
+MemoryMax=180M
+
+[Install]
+WantedBy=default.target

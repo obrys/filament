@@ -1,0 +1,33 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+_ReSharper*/
+*.DotSettings.user
+*.ncrunch*
+*.ncrunchsolution
+TestResult.xml
+
+## Rider / JetBrains
+.idea/
+*.sln.iml
+
+## VS Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Secrets / local config
+appsettings.Local.json
+appsettings.Development.local.json
+*.pfx
+*.p12
+*.env
+.env.local
+secrets.json

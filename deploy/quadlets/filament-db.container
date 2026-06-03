@@ -1,0 +1,47 @@
+[Unit]
+Description=Filament — MariaDB 11
+Requires=filament-db.volume filament.network
+After=filament-db.volume filament.network
+
+[Container]
+Image=docker.io/library/mariadb:11
+ContainerName=filament-db
+Network=filament.network
+Volume=filament-db.volume:/var/lib/mysql:Z
+
+# Credentials — match the API's connection string below.
+Environment=MARIADB_DATABASE=filament
+Environment=MARIADB_USER=filament
+Environment=MARIADB_PASSWORD=filament
+Environment=MARIADB_RANDOM_ROOT_PASSWORD=yes
+
+# Memory tuning for sub-1GB systems. innodb_buffer_pool_size of 32 MiB is the
+# main lever; drop to 16M if your VM has only 768 MB total RAM.
+Exec=mariadbd \
+     --innodb-buffer-pool-size=32M \
+     --innodb-log-file-size=16M \
+     --max-connections=20 \
+     --performance-schema=OFF \
+     --skip-log-bin \
+     --table-open-cache=64 \
+     --tmp-table-size=8M \
+     --max-heap-table-size=8M \
+     --thread-stack=196K \
+     --thread-cache-size=4
+
+HealthCmd=/usr/local/bin/healthcheck.sh --connect --innodb_initialized
+HealthInterval=10s
+HealthRetries=10
+HealthStartPeriod=60s
+HealthTimeout=5s
+
+[Service]
+Restart=on-failure
+RestartSec=10
+# MariaDB's first-time init (mysql_install_db) briefly needs ~300 MB.
+# After init the steady-state RSS is ~150-180 MB, so this ceiling is safe.
+MemoryHigh=350M
+MemoryMax=420M
+
+[Install]
+WantedBy=default.target
