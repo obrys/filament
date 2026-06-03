@@ -11,9 +11,9 @@ public sealed class FilamentDbContext : DbContext
     internal DbSet<SpoolEntity> Spools => Set<SpoolEntity>();
     internal DbSet<SpoolEventEntity> SpoolEvents => Set<SpoolEventEntity>();
 
-    protected override void OnModelCreating(ModelBuilder b)
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        b.Entity<FilamentTypeEntity>(e =>
+        modelBuilder.Entity<FilamentTypeEntity>(e =>
         {
             e.ToTable("filament_types");
             e.HasKey(x => x.Id);
@@ -27,7 +27,7 @@ public sealed class FilamentDbContext : DbContext
             e.HasIndex(x => new { x.Brand, x.Material, x.Type, x.Color });
         });
 
-        b.Entity<SpoolEntity>(e =>
+        modelBuilder.Entity<SpoolEntity>(e =>
         {
             e.ToTable("spools");
             e.HasKey(x => x.Id);
@@ -42,7 +42,7 @@ public sealed class FilamentDbContext : DbContext
             e.HasIndex(x => x.FilamentTypeId);
         });
 
-        b.Entity<SpoolEventEntity>(e =>
+        modelBuilder.Entity<SpoolEventEntity>(e =>
         {
             e.ToTable("spool_events");
             e.HasKey(x => x.Id);

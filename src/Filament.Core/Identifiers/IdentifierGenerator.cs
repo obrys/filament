@@ -18,7 +18,7 @@ public static class IdentifierGenerator
 
     public static string Generate(int length)
     {
-        if (length <= 0) throw new ArgumentOutOfRangeException(nameof(length));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(length);
         Span<char> buffer = stackalloc char[length];
         Span<byte> bytes = stackalloc byte[length];
         RandomNumberGenerator.Fill(bytes);
