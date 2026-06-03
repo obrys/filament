@@ -21,7 +21,7 @@ public sealed class ChangeBroker : IChangeNotifier
     {
         var id = Guid.NewGuid();
         _sockets[id] = socket;
-        _logger.LogInformation("WS client connected: {Id} ({Count} total)", id, _sockets.Count);
+        ChangeBrokerLog.ClientConnected(_logger, id, _sockets.Count);
         try
         {
             var buf = new byte[1024];
@@ -45,12 +45,12 @@ public sealed class ChangeBroker : IChangeNotifier
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "WS client {Id} error", id);
+            ChangeBrokerLog.ClientError(_logger, id, ex);
         }
         finally
         {
             _sockets.TryRemove(id, out _);
-            _logger.LogInformation("WS client disconnected: {Id} ({Count} total)", id, _sockets.Count);
+            ChangeBrokerLog.ClientDisconnected(_logger, id, _sockets.Count);
         }
     }
 

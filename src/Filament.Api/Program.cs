@@ -67,10 +67,19 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Database migration failed at startup.");
+        StartupLog.DatabaseMigrationFailed(logger, ex);
     }
 }
 
 app.Run();
 
 public partial class Program { }
+
+internal static partial class StartupLog
+{
+    [LoggerMessage(
+        EventId = 1100,
+        Level = LogLevel.Error,
+        Message = "Database migration failed at startup.")]
+    public static partial void DatabaseMigrationFailed(ILogger logger, Exception exception);
+}

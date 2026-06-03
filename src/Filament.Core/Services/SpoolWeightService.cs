@@ -15,7 +15,7 @@ public static class SpoolWeightService
         DateTimeOffset? at = null)
     {
         ArgumentNullException.ThrowIfNull(spool);
-        if (grams <= 0) throw new ArgumentOutOfRangeException(nameof(grams), "Must be positive.");
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(grams);
         if (spool.Status == SpoolStatus.Finished)
             throw new InvalidOperationException("Spool is already finished.");
         if (grams > spool.RemainingGrams)
@@ -55,7 +55,7 @@ public static class SpoolWeightService
     public static ConsumeResult Adjust(Spool spool, int newRemainingGrams, string? notes = null, DateTimeOffset? at = null)
     {
         ArgumentNullException.ThrowIfNull(spool);
-        if (newRemainingGrams < 0) throw new ArgumentOutOfRangeException(nameof(newRemainingGrams));
+        ArgumentOutOfRangeException.ThrowIfNegative(newRemainingGrams);
         if (spool.Status == SpoolStatus.Finished)
             throw new InvalidOperationException("Spool is already finished.");
 

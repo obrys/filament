@@ -24,3 +24,9 @@ indent_size = 2
 
 [*.md]
 trim_trailing_whitespace = false
+
+[tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none
+
+[src/Filament.Infrastructure/Persistence/Migrations/*.cs]
+dotnet_diagnostic.CA1861.severity = none
