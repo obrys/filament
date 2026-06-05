@@ -23,6 +23,7 @@ Environment=DOTNET_GCHeapHardLimit=134217728
 [Service]
 Restart=on-failure
 RestartSec=10
+TimeoutStopSec=20
 MemoryHigh=250M
 MemoryMax=512M
 
