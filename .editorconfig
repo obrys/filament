@@ -29,4 +29,5 @@ trim_trailing_whitespace = false
 dotnet_diagnostic.CA1707.severity = none
 
 [src/Filament.Infrastructure/Persistence/Migrations/*.cs]
-dotnet_diagnostic.CA1861.severity = none
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none
