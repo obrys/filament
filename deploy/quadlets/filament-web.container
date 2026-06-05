@@ -12,6 +12,7 @@ PublishPort=8081:8080
 [Service]
 Restart=on-failure
 RestartSec=10
+TimeoutStopSec=15
 MemoryHigh=20M
 MemoryMax=32M
 
