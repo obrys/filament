@@ -17,7 +17,7 @@ Then open:
 
 ```bash
 # 1) Start only the database
-docker compose up -d db
+podman compose up -d db
 
 # 2) Backend (auto-runs migrations on startup)
 dotnet run --project src/Filament.Api
