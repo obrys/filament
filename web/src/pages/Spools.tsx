@@ -57,7 +57,7 @@ export function Spools() {
                   <td><input type="checkbox" style={{ width: 'auto' }} checked={selected.has(s.id)} onChange={() => toggle(s.id)} /></td>
                   <td data-label="ID"><Link to={`/spools/${s.id}`} className="id-pill">{s.id}</Link></td>
                   <td data-label="Type">
-                    {t ? <>{t.colorHex && <span className="swatch" style={{ background: t.colorHex }} />} {t.brand} {t.material} · {t.color}</> : s.filamentTypeId}
+                    {t ? <>{t.colorHex && <span className="swatch" style={{ background: t.colorHex }} />} {t.brand} · {t.material} · {t.type} · {t.color}</> : s.filamentTypeId}
                   </td>
                   <td data-label="Remaining">{s.remainingGrams} g</td>
                   <td data-label="Status">{s.status}</td>
@@ -95,7 +95,7 @@ function NewSpoolForm({ types, onCreated }: { types: FilamentType[]; onCreated: 
       <div className="grid">
         <label>Filament type
           <select value={filamentTypeId} onChange={e => setFilamentTypeId(e.target.value)}>
-            {types.map(t => <option key={t.id} value={t.id}>{t.id} — {t.brand} {t.material} {t.color}</option>)}
+            {types.map(t => <option key={t.id} value={t.id}>{t.id} — {t.brand} · {t.material} · {t.type} · {t.color}</option>)}
           </select>
         </label>
         <label>Initial net (g, optional)
