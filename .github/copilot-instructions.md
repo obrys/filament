@@ -46,14 +46,42 @@ Try to externalize the business logic if possible. Always use unit tests for bus
 ## Solution Structure
 
 ```
-src/          # Production projects  (add: <ProjectName>/<ProjectName>.csproj)
-tests/        # Test projects        (add: <ProjectName>.Tests/<ProjectName>.Tests.csproj)
+.github/
+  copilot-instructions.md          # Repo-wide Copilot context (this file)
+  instructions/
+    backend.instructions.md        # Path-scoped instructions for src/ and tests/
+    frontend.instructions.md       # Path-scoped instructions for web/
+  prompts/
+    add-api-endpoint.prompt.md     # Reusable prompt: add a new API endpoint
+    add-filament-feature.prompt.md # Reusable prompt: add a full feature end-to-end
+    add-migration.prompt.md        # Reusable prompt: add an EF Core migration
+src/          # Back-end production projects  (<ProjectName>/<ProjectName>.csproj)
+tests/        # Back-end test projects        (<ProjectName>.Tests/<ProjectName>.Tests.csproj)
+web/          # React front-end application
+deploy/       # Deployment artifacts (docker-compose, env templates, etc.)
 ```
 
-Document naming conventions for projects when they are added, e.g.:
-  - Filament.Core       — domain / business logic
-  - Filament.Api        — HTTP API host
-  - Filament.Core.Tests — unit tests for Filament.Core
+### Back-end projects (current)
+
+| Project | Purpose |
+|---|---|
+| `Filament.Core` | Domain model, business logic, service abstractions, identifier generation |
+| `Filament.Api` | ASP.NET HTTP host: controllers, DTOs, mapping, PDF generation, WebSocket hub |
+| `Filament.Infrastructure` | EF Core entities, migrations, repository implementations, DI registration |
+| `Filament.Core.Tests` | Unit tests for `Filament.Core` business logic |
+
+### AI artifacts
+
+| Path | Purpose |
+|---|---|
+| `.github/copilot-instructions.md` | Repository-wide context loaded automatically by GitHub Copilot in every session |
+| `.github/instructions/*.instructions.md` | Granular, path-scoped instructions — use `applyTo` front-matter to target specific directories or file globs |
+| `.github/prompts/*.prompt.md` | Reusable prompt files for common, repeatable tasks. Invoke in Copilot Chat via `#` or the prompt picker |
+
+**Rule of thumb:**
+- Keep *project overview, tech stack, and use cases* in `copilot-instructions.md`.
+- Keep *layer-specific coding patterns* (naming, testing style, architecture rules) in the matching `instructions/` file.
+- Keep *step-by-step task workflows* (e.g. "add a new endpoint") as `prompts/` files so any team member can reuse them.
 
 
 
