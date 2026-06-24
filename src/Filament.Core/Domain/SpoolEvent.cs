@@ -21,9 +21,6 @@ public sealed class SpoolEvent
     /// <summary>Delta in grams (negative for consumption, positive for adjustments up).</summary>
     public int DeltaGrams { get; init; }
 
-    /// <summary>Remaining grams *after* the event.</summary>
-    public int RemainingAfterGrams { get; init; }
-
     public string? ProjectName { get; init; }
     public string? ProjectUrl { get; init; }
     public string? Notes { get; init; }

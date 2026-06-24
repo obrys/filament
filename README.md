@@ -71,6 +71,4 @@ desktop-to-server deploy script, and a runtime footprint under 1 GB RAM.
 ## Documentation
 
 - [`.github/copilot-instructions.md`](.github/copilot-instructions.md) — AI assistant context
-- [`docs/requirements/`](docs/requirements/) — Feature specifications
-- [`docs/architecture/`](docs/architecture/) — High-level design notes
-- [`docs/decisions/`](docs/decisions/) — Decision log
+

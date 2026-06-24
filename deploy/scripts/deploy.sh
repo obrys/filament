@@ -56,10 +56,30 @@ done
 systemctl --user restart filament-api.service
 systemctl --user restart filament-web.service
 
+# Verify the API actually came up healthy. With migration fail-fast, a failed
+# migration crashes the container (Restart=on-failure), so a crash-loop would
+# otherwise be reported as a successful deploy. Poll /healthz until it responds.
+echo "==> Waiting for API to report healthy"
+healthy=0
+for i in {1..30}; do
+    if curl -fsS --max-time 3 http://localhost:8080/healthz >/dev/null 2>&1; then
+        healthy=1
+        break
+    fi
+    sleep 2
+done
+
 systemctl --user --no-pager status \
     filament-db.service \
     filament-api.service \
     filament-web.service | head -40
+
+if [[ "$healthy" -ne 1 ]]; then
+    echo "ERROR: API did not become healthy within ~60s. Recent API logs:" >&2
+    journalctl --user -u filament-api.service --no-pager -n 50 >&2 || true
+    exit 1
+fi
+echo "==> API healthy."
 REMOTE
 
 echo "==> Deployment complete."

@@ -43,7 +43,6 @@ public static class SpoolWeightService
             SpoolId = spool.Id,
             Kind = spool.Status == SpoolStatus.Finished ? SpoolEventKind.Finished : SpoolEventKind.Print,
             DeltaGrams = -grams,
-            RemainingAfterGrams = spool.RemainingGrams,
             ProjectName = projectName,
             ProjectUrl = projectUrl,
             Notes = notes,
@@ -73,11 +72,38 @@ public static class SpoolWeightService
             SpoolId = spool.Id,
             Kind = newRemainingGrams == 0 ? SpoolEventKind.Finished : SpoolEventKind.Adjustment,
             DeltaGrams = delta,
-            RemainingAfterGrams = newRemainingGrams,
             Notes = notes,
             OccurredAt = now,
         };
         return new ConsumeResult(spool, ev);
+    }
+
+    /// <summary>
+    /// Computes a spool's remaining grams from its initial net weight plus the sum of all
+    /// event deltas. This is the single source of truth now that the value is no longer stored.
+    /// </summary>
+    public static int ComputeRemaining(int initialNetGrams, IEnumerable<SpoolEvent> events)
+    {
+        ArgumentNullException.ThrowIfNull(events);
+        return initialNetGrams + events.Sum(e => e.DeltaGrams);
+    }
+
+    /// <summary>
+    /// Computes the remaining grams *after* each event, returned keyed by event id. Events are
+    /// folded in chronological order (OccurredAt, then Id) starting from the initial net weight.
+    /// </summary>
+    public static IReadOnlyDictionary<long, int> ComputeRemainingAfter(
+        int initialNetGrams, IEnumerable<SpoolEvent> events)
+    {
+        ArgumentNullException.ThrowIfNull(events);
+        var running = initialNetGrams;
+        var result = new Dictionary<long, int>();
+        foreach (var e in events.OrderBy(e => e.OccurredAt).ThenBy(e => e.Id))
+        {
+            running += e.DeltaGrams;
+            result[e.Id] = running;
+        }
+        return result;
     }
 
     public static int EffectiveEmptySpoolGrams(Spool spool, FilamentType type) =>

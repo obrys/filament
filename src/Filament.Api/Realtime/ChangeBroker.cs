@@ -10,10 +10,11 @@ namespace Filament.Api.Realtime;
 /// Tracks connected WebSocket clients and broadcasts JSON change notifications.
 /// Uses application-level ping/pong (every 20 s) so both ends detect dropped connections.
 /// </summary>
-public sealed class ChangeBroker : IChangeNotifier
+public sealed class ChangeBroker : IChangeNotifier, IDisposable
 {
     private readonly ConcurrentDictionary<Guid, WebSocket> _sockets = new();
     private readonly ILogger<ChangeBroker> _logger;
+    private readonly CancellationTokenSource _shutdownCts = new();
 
     public ChangeBroker(ILogger<ChangeBroker> logger) => _logger = logger;
 
@@ -22,15 +23,18 @@ public sealed class ChangeBroker : IChangeNotifier
         var id = Guid.NewGuid();
         _sockets[id] = socket;
         ChangeBrokerLog.ClientConnected(_logger, id, _sockets.Count);
+        // Cancel the receive loop either when the client aborts or when the server shuts down.
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _shutdownCts.Token);
+        var token = linked.Token;
         try
         {
             var buf = new byte[1024];
-            while (socket.State == WebSocketState.Open && !ct.IsCancellationRequested)
+            while (socket.State == WebSocketState.Open && !token.IsCancellationRequested)
             {
-                var result = await socket.ReceiveAsync(buf, ct);
+                var result = await socket.ReceiveAsync(buf, token);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
-                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, null, ct);
+                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, null, token);
                     break;
                 }
                 // Treat any text frame as a keep-alive ping; reply with pong.
@@ -38,7 +42,7 @@ public sealed class ChangeBroker : IChangeNotifier
                 {
                     var msg = Encoding.UTF8.GetString(buf, 0, result.Count);
                     if (msg.Contains("ping", StringComparison.OrdinalIgnoreCase))
-                        await SendAsync(socket, """{"type":"pong"}""", ct);
+                        await SendAsync(socket, """{"type":"pong"}""", token);
                 }
             }
         }
@@ -77,4 +81,34 @@ public sealed class ChangeBroker : IChangeNotifier
 
     private static Task SendAsync(WebSocket s, string text, CancellationToken ct) =>
         s.SendAsync(Encoding.UTF8.GetBytes(text), WebSocketMessageType.Text, true, ct);
+
+    /// <summary>
+    /// Closes all WebSocket connections so the host can shut down promptly instead of
+    /// waiting for idle WebSocket requests to drain. Each client is sent a clean close frame
+    /// (so it can reconnect) and the receive loops are cancelled.
+    /// </summary>
+    public async Task ShutdownAsync()
+    {
+        foreach (var (_, sock) in _sockets)
+        {
+            try
+            {
+                if (sock.State == WebSocketState.Open)
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    await sock.CloseOutputAsync(
+                        WebSocketCloseStatus.EndpointUnavailable, "Server restarting", cts.Token);
+                }
+            }
+            catch
+            {
+                // Best effort — the connection may already be gone.
+            }
+        }
+
+        // Unblock every receive loop so the in-flight requests complete immediately.
+        await _shutdownCts.CancelAsync();
+    }
+
+    public void Dispose() => _shutdownCts.Dispose();
 }
