@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Filament.Api;
 using Filament.Api.Pdf;
 using Filament.Api.Realtime;
 using Filament.Core.Abstractions;
@@ -30,6 +31,7 @@ builder.Services.AddFilamentInfrastructure(connection);
 builder.Services.AddSingleton<ChangeBroker>();
 builder.Services.AddSingleton<IChangeNotifier>(sp => sp.GetRequiredService<ChangeBroker>());
 builder.Services.AddSingleton<LabelPdfGenerator>();
+builder.Services.AddSingleton<ShutdownState>();
 
 // Safety net: if anything stalls on shutdown, give up well before the Quadlet's
 // TimeoutStopSec (20s) SIGKILLs us, so restarts stay fast and clean.
@@ -41,6 +43,14 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
 app.UseCors();
+
+// Stamp every response with the running backend version so clients can detect a
+// redeploy and reload themselves to stay consistent with the server.
+app.Use(async (ctx, next) =>
+{
+    ctx.Response.Headers["X-App-Version"] = AppVersion.Current;
+    await next();
+});
 
 app.UseWebSockets(new WebSocketOptions
 {
@@ -61,12 +71,26 @@ app.Map("/ws/changes", async (HttpContext ctx, ChangeBroker broker) =>
 app.MapControllers();
 app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 
-// On graceful shutdown, promptly close all WebSocket connections. Otherwise the host
-// blocks waiting for these long-lived, idle requests to drain, which is what made
-// restarts take dozens of seconds. Clients reconnect automatically.
+// Version + liveness probe for the front end. While the host is shutting down this
+// reports 503 so polling clients keep waiting until the new instance answers.
+app.MapGet("/api/version", (ShutdownState shutdown) =>
+    shutdown.IsShuttingDown
+        ? Results.StatusCode(StatusCodes.Status503ServiceUnavailable)
+        : Results.Ok(new { version = AppVersion.Current }));
+
+// On graceful shutdown, mark the instance unavailable and promptly close all WebSocket
+// connections (also broadcasting a "server-shutdown" message so clients can show a
+// "restarting" notice and start polling /api/version). Otherwise the host blocks waiting
+// for these long-lived, idle requests to drain, which is what made restarts take dozens
+// of seconds. Clients reconnect / reload automatically.
 var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
 var broker = app.Services.GetRequiredService<ChangeBroker>();
-lifetime.ApplicationStopping.Register(() => broker.ShutdownAsync().GetAwaiter().GetResult());
+var shutdownState = app.Services.GetRequiredService<ShutdownState>();
+lifetime.ApplicationStopping.Register(() =>
+{
+    shutdownState.MarkShuttingDown();
+    broker.ShutdownAsync().GetAwaiter().GetResult();
+});
 
 using (var scope = app.Services.CreateScope())
 {

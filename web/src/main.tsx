@@ -6,12 +6,14 @@ import { FilamentTypes } from './pages/FilamentTypes'
 import { Spools } from './pages/Spools'
 import { SpoolDetail } from './pages/SpoolDetail'
 import { useChangeStream } from './realtime/useChangeStream'
+import { VersionGate } from './realtime/VersionGate'
 import './styles.css'
 
 function App() {
   useChangeStream()
   return (
     <BrowserRouter>
+      <VersionGate />
       <header className="topbar">
         <Link to="/" className="brand">🧵 Filament</Link>
         <nav>

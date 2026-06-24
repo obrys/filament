@@ -89,6 +89,10 @@ public sealed class ChangeBroker : IChangeNotifier, IDisposable
     /// </summary>
     public async Task ShutdownAsync()
     {
+        // Tell every client we're going down so they can show a notice and start polling
+        // for the new instance, before we close the sockets out from under them.
+        await NotifyShutdownAsync();
+
         foreach (var (_, sock) in _sockets)
         {
             try
@@ -108,6 +112,26 @@ public sealed class ChangeBroker : IChangeNotifier, IDisposable
 
         // Unblock every receive loop so the in-flight requests complete immediately.
         await _shutdownCts.CancelAsync();
+    }
+
+    private async Task NotifyShutdownAsync()
+    {
+        const string payload = """{"type":"server-shutdown"}""";
+        foreach (var (_, sock) in _sockets)
+        {
+            try
+            {
+                if (sock.State == WebSocketState.Open)
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+                    await SendAsync(sock, payload, cts.Token);
+                }
+            }
+            catch
+            {
+                // Best effort — the client may already be gone.
+            }
+        }
     }
 
     public void Dispose() => _shutdownCts.Dispose();

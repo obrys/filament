@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { emitServerRestarting } from '../version'
 
 type ChangeMessage = { type: 'change'; resource: string; id?: string | null }
 
@@ -40,6 +41,10 @@ export function useChangeStream() {
           const msg = JSON.parse(ev.data)
           if (msg.type === 'change') {
             for (const cb of listeners) cb(msg)
+          } else if (msg.type === 'server-shutdown') {
+            // Backend is going down for a redeploy/restart. Let the VersionGate take over:
+            // it polls /api/version and reloads if the returned version changed.
+            emitServerRestarting()
           }
         } catch { /* ignore */ }
       }
