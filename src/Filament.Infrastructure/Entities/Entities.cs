@@ -22,7 +22,6 @@ internal sealed class SpoolEntity
     public string FilamentTypeId { get; set; } = default!;
     public FilamentTypeEntity? FilamentType { get; set; }
 
-    public int RemainingGrams { get; set; }
     public int InitialNetGrams { get; set; }
     public int? EmptySpoolWeightGramsOverride { get; set; }
     public int Status { get; set; }
@@ -43,7 +42,6 @@ internal sealed class SpoolEventEntity
     public SpoolEntity? Spool { get; set; }
     public int Kind { get; set; }
     public int DeltaGrams { get; set; }
-    public int RemainingAfterGrams { get; set; }
     public string? ProjectName { get; set; }
     public string? ProjectUrl { get; set; }
     public string? Notes { get; set; }

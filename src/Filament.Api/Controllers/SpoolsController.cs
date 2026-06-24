@@ -56,9 +56,11 @@ public sealed class SpoolsController : ControllerBase
     [HttpGet("{id}/events")]
     public async Task<ActionResult<IReadOnlyList<SpoolEventDto>>> Events(string id, CancellationToken ct)
     {
-        if (await _spools.GetAsync(id, ct) is null) return NotFound();
+        var spool = await _spools.GetAsync(id, ct);
+        if (spool is null) return NotFound();
         var events = await _spools.ListEventsAsync(id, ct);
-        return Ok(events.Select(e => e.ToDto()).ToList());
+        var remainingAfter = SpoolWeightService.ComputeRemainingAfter(spool.InitialNetGrams, events);
+        return Ok(events.Select(e => e.ToDto(remainingAfter[e.Id])).ToList());
     }
 
     [HttpPost]
@@ -86,7 +88,6 @@ public sealed class SpoolsController : ControllerBase
             SpoolId = id,
             Kind = SpoolEventKind.Created,
             DeltaGrams = 0,
-            RemainingAfterGrams = initial,
         };
         await _spools.AddAsync(spool, created, ct);
         await _notifier.NotifyAsync("spool", id, ct);

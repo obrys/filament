@@ -51,6 +51,7 @@ Try to externalize the business logic if possible. Always use unit tests for bus
   instructions/
     backend.instructions.md        # Path-scoped instructions for src/ and tests/
     frontend.instructions.md       # Path-scoped instructions for web/
+  changes/                         # Change instructions
   prompts/
     add-api-endpoint.prompt.md     # Reusable prompt: add a new API endpoint
     add-filament-feature.prompt.md # Reusable prompt: add a full feature end-to-end

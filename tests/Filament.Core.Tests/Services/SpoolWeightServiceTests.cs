@@ -25,7 +25,6 @@ public class SpoolWeightServiceTests
         Assert.NotNull(s.OpenedAt);
         Assert.Equal(SpoolEventKind.Print, result.Event.Kind);
         Assert.Equal(-50, result.Event.DeltaGrams);
-        Assert.Equal(950, result.Event.RemainingAfterGrams);
     }
 
     [Fact]
@@ -92,5 +91,53 @@ public class SpoolWeightServiceTests
         Assert.Equal(200, SpoolWeightService.EffectiveEmptySpoolGrams(s, type));
         s.EmptySpoolWeightGramsOverride = 150;
         Assert.Equal(150, SpoolWeightService.EffectiveEmptySpoolGrams(s, type));
+    }
+
+    [Fact]
+    public void ComputeRemaining_SumsInitialAndDeltas()
+    {
+        var events = new[]
+        {
+            new SpoolEvent { Id = 1, SpoolId = "AAAA", Kind = SpoolEventKind.Created, DeltaGrams = 0 },
+            new SpoolEvent { Id = 2, SpoolId = "AAAA", Kind = SpoolEventKind.Print, DeltaGrams = -50 },
+            new SpoolEvent { Id = 3, SpoolId = "AAAA", Kind = SpoolEventKind.Adjustment, DeltaGrams = -30 },
+        };
+        Assert.Equal(920, SpoolWeightService.ComputeRemaining(1000, events));
+    }
+
+    [Fact]
+    public void ComputeRemaining_NoEvents_ReturnsInitial()
+    {
+        Assert.Equal(1000, SpoolWeightService.ComputeRemaining(1000, Array.Empty<SpoolEvent>()));
+    }
+
+    [Fact]
+    public void ComputeRemainingAfter_FoldsInChronologicalOrder()
+    {
+        var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        // Provided out of order; helper must fold by (OccurredAt, Id).
+        var events = new[]
+        {
+            new SpoolEvent { Id = 3, SpoolId = "AAAA", Kind = SpoolEventKind.Print, DeltaGrams = -30, OccurredAt = t0.AddHours(2) },
+            new SpoolEvent { Id = 1, SpoolId = "AAAA", Kind = SpoolEventKind.Created, DeltaGrams = 0, OccurredAt = t0 },
+            new SpoolEvent { Id = 2, SpoolId = "AAAA", Kind = SpoolEventKind.Print, DeltaGrams = -50, OccurredAt = t0.AddHours(1) },
+        };
+        var after = SpoolWeightService.ComputeRemainingAfter(1000, events);
+        Assert.Equal(1000, after[1]);
+        Assert.Equal(950, after[2]);
+        Assert.Equal(920, after[3]);
+    }
+
+    [Fact]
+    public void ComputeRemaining_MatchesConsumeAndAdjustSequence()
+    {
+        // The stored value the old schema kept must equal the recomputed value.
+        var s = NewSpool(1000, SpoolStatus.Open);
+        var e1 = SpoolWeightService.Consume(s, 200).Event;
+        var e2 = SpoolWeightService.Adjust(s, 750).Event;
+        var e3 = SpoolWeightService.Consume(s, 50).Event;
+        var recomputed = SpoolWeightService.ComputeRemaining(s.InitialNetGrams, new[] { e1, e2, e3 });
+        Assert.Equal(s.RemainingGrams, recomputed);
+        Assert.Equal(700, recomputed);
     }
 }

@@ -15,7 +15,11 @@ public sealed class Spool
     public required string Id { get; init; }
     public required string FilamentTypeId { get; set; }
 
-    /// <summary>Remaining filament weight in grams.</summary>
+    /// <summary>
+    /// Remaining filament weight in grams. Derived, not persisted: computed as
+    /// <see cref="InitialNetGrams"/> plus the sum of all spool-event deltas. The repository
+    /// populates this when loading a spool; mutating it in memory does not write a column.
+    /// </summary>
     public int RemainingGrams { get; set; }
 
     /// <summary>Initial net weight in grams when the spool was created.</summary>

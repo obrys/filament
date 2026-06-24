@@ -63,7 +63,13 @@ public sealed class SpoolRepository : ISpoolRepository
     public async Task<Spool?> GetAsync(string id, CancellationToken ct = default)
     {
         var e = await _db.Spools.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
-        return e?.ToDomain();
+        if (e is null) return null;
+        var delta = await _db.SpoolEvents.AsNoTracking()
+            .Where(ev => ev.SpoolId == id)
+            .SumAsync(ev => (int?)ev.DeltaGrams, ct) ?? 0;
+        var spool = e.ToDomain();
+        spool.RemainingGrams = e.InitialNetGrams + delta;
+        return spool;
     }
 
     public async Task<IReadOnlyList<Spool>> ListAsync(string? filamentTypeId = null, bool includeFinished = false, CancellationToken ct = default)
@@ -71,8 +77,21 @@ public sealed class SpoolRepository : ISpoolRepository
         var q = _db.Spools.AsNoTracking().AsQueryable();
         if (filamentTypeId is not null) q = q.Where(s => s.FilamentTypeId == filamentTypeId);
         if (!includeFinished) q = q.Where(s => s.Status != (int)SpoolStatus.Finished);
-        var list = await q.OrderByDescending(s => s.CreatedAt).ToListAsync(ct);
-        return list.Select(EntityMapping.ToDomain).ToList();
+        var entities = await q.OrderByDescending(s => s.CreatedAt).ToListAsync(ct);
+
+        var ids = entities.Select(s => s.Id).ToList();
+        var deltas = await _db.SpoolEvents.AsNoTracking()
+            .Where(ev => ids.Contains(ev.SpoolId))
+            .GroupBy(ev => ev.SpoolId)
+            .Select(g => new { SpoolId = g.Key, Delta = g.Sum(x => x.DeltaGrams) })
+            .ToDictionaryAsync(x => x.SpoolId, x => x.Delta, ct);
+
+        return entities.Select(e =>
+        {
+            var d = e.ToDomain();
+            d.RemainingGrams = e.InitialNetGrams + (deltas.TryGetValue(e.Id, out var delta) ? delta : 0);
+            return d;
+        }).ToList();
     }
 
     public async Task AddAsync(Spool spool, SpoolEvent createdEvent, CancellationToken ct = default)
@@ -121,8 +140,16 @@ public sealed class DashboardRepository : IDashboardRepository
         var typeCount = await _db.FilamentTypes.CountAsync(ct);
         var active = await _db.Spools.Where(s => s.Status != (int)SpoolStatus.Finished).CountAsync(ct);
         var finished = await _db.Spools.Where(s => s.Status == (int)SpoolStatus.Finished).CountAsync(ct);
-        var totalRemaining = await _db.Spools.Where(s => s.Status != (int)SpoolStatus.Finished)
-            .SumAsync(s => (int?)s.RemainingGrams, ct) ?? 0;
+
+        // Remaining is derived: sum of initial net weights of active spools plus all their event deltas.
+        var activeIds = await _db.Spools.Where(s => s.Status != (int)SpoolStatus.Finished)
+            .Select(s => s.Id).ToListAsync(ct);
+        var totalInitial = await _db.Spools.Where(s => s.Status != (int)SpoolStatus.Finished)
+            .SumAsync(s => (int?)s.InitialNetGrams, ct) ?? 0;
+        var totalDelta = await _db.SpoolEvents.Where(e => activeIds.Contains(e.SpoolId))
+            .SumAsync(e => (int?)e.DeltaGrams, ct) ?? 0;
+        var totalRemaining = totalInitial + totalDelta;
+
         return new DashboardSummary(typeCount, active, finished, totalRemaining);
     }
 

@@ -49,7 +49,6 @@ internal static class EntityMapping
     {
         Id = e.Id,
         FilamentTypeId = e.FilamentTypeId,
-        RemainingGrams = e.RemainingGrams,
         InitialNetGrams = e.InitialNetGrams,
         EmptySpoolWeightGramsOverride = e.EmptySpoolWeightGramsOverride,
         Status = (SpoolStatus)e.Status,
@@ -63,7 +62,6 @@ internal static class EntityMapping
     {
         Id = d.Id,
         FilamentTypeId = d.FilamentTypeId,
-        RemainingGrams = d.RemainingGrams,
         InitialNetGrams = d.InitialNetGrams,
         EmptySpoolWeightGramsOverride = d.EmptySpoolWeightGramsOverride,
         Status = (int)d.Status,
@@ -76,7 +74,6 @@ internal static class EntityMapping
     public static void CopyTo(this Spool d, SpoolEntity e)
     {
         e.FilamentTypeId = d.FilamentTypeId;
-        e.RemainingGrams = d.RemainingGrams;
         e.InitialNetGrams = d.InitialNetGrams;
         e.EmptySpoolWeightGramsOverride = d.EmptySpoolWeightGramsOverride;
         e.Status = (int)d.Status;
@@ -91,7 +88,6 @@ internal static class EntityMapping
         SpoolId = e.SpoolId,
         Kind = (SpoolEventKind)e.Kind,
         DeltaGrams = e.DeltaGrams,
-        RemainingAfterGrams = e.RemainingAfterGrams,
         ProjectName = e.ProjectName,
         ProjectUrl = e.ProjectUrl,
         Notes = e.Notes,
@@ -103,7 +99,6 @@ internal static class EntityMapping
         SpoolId = d.SpoolId,
         Kind = (int)d.Kind,
         DeltaGrams = d.DeltaGrams,
-        RemainingAfterGrams = d.RemainingAfterGrams,
         ProjectName = d.ProjectName,
         ProjectUrl = d.ProjectUrl,
         Notes = d.Notes,

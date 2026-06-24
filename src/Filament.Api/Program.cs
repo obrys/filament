@@ -31,6 +31,10 @@ builder.Services.AddSingleton<ChangeBroker>();
 builder.Services.AddSingleton<IChangeNotifier>(sp => sp.GetRequiredService<ChangeBroker>());
 builder.Services.AddSingleton<LabelPdfGenerator>();
 
+// Safety net: if anything stalls on shutdown, give up well before the Quadlet's
+// TimeoutStopSec (20s) SIGKILLs us, so restarts stay fast and clean.
+builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(10));
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -57,17 +61,39 @@ app.Map("/ws/changes", async (HttpContext ctx, ChangeBroker broker) =>
 app.MapControllers();
 app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 
+// On graceful shutdown, promptly close all WebSocket connections. Otherwise the host
+// blocks waiting for these long-lived, idle requests to drain, which is what made
+// restarts take dozens of seconds. Clients reconnect automatically.
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+var broker = app.Services.GetRequiredService<ChangeBroker>();
+lifetime.ApplicationStopping.Register(() => broker.ShutdownAsync().GetAwaiter().GetResult());
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<FilamentDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    try
+
+    const int maxAttempts = 10;
+    for (var attempt = 1; ; attempt++)
     {
-        await db.Database.MigrateAsync();
-    }
-    catch (Exception ex)
-    {
-        StartupLog.DatabaseMigrationFailed(logger, ex);
+        try
+        {
+            await db.Database.MigrateAsync();
+            StartupLog.DatabaseMigrated(logger);
+            break;
+        }
+        catch (Exception ex) when (attempt < maxAttempts)
+        {
+            StartupLog.DatabaseMigrationRetry(logger, attempt, maxAttempts, ex);
+            await Task.Delay(TimeSpan.FromSeconds(3));
+        }
+        catch (Exception ex)
+        {
+            StartupLog.DatabaseMigrationFailed(logger, ex);
+            // Fail fast: crash so the container restarts (Restart=on-failure) instead of
+            // silently serving traffic against an un-migrated schema.
+            throw;
+        }
     }
 }
 
@@ -80,6 +106,18 @@ internal static partial class StartupLog
     [LoggerMessage(
         EventId = 1100,
         Level = LogLevel.Error,
-        Message = "Database migration failed at startup.")]
+        Message = "Database migration failed at startup; aborting.")]
     public static partial void DatabaseMigrationFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 1101,
+        Level = LogLevel.Warning,
+        Message = "Database migration attempt {Attempt}/{MaxAttempts} failed; retrying.")]
+    public static partial void DatabaseMigrationRetry(ILogger logger, int attempt, int maxAttempts, Exception exception);
+
+    [LoggerMessage(
+        EventId = 1102,
+        Level = LogLevel.Information,
+        Message = "Database migrations applied successfully.")]
+    public static partial void DatabaseMigrated(ILogger logger);
 }

@@ -12,7 +12,15 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services, string connectionString)
     {
         services.AddDbContext<FilamentDbContext>(opt =>
-            opt.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+            opt.UseMySql(
+                connectionString,
+                // Fixed server version avoids a blocking DB round-trip at startup
+                // (ServerVersion.AutoDetect connects eagerly and fails if the DB is not yet ready).
+                new MariaDbServerVersion(new Version(11, 4, 0)),
+                mysql => mysql.EnableRetryOnFailure(
+                    maxRetryCount: 5,
+                    maxRetryDelay: TimeSpan.FromSeconds(5),
+                    errorNumbersToAdd: null)));
 
         services.AddScoped<IFilamentTypeRepository, FilamentTypeRepository>();
         services.AddScoped<ISpoolRepository, SpoolRepository>();
