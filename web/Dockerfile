@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.6
 FROM node:22-alpine AS build
 WORKDIR /src
+ARG GIT_COMMIT=dev
+ENV GIT_COMMIT=$GIT_COMMIT
 COPY package.json package-lock.json* ./
 # Workaround for npm optional dependencies bug (https://github.com/npm/cli/issues/4828)
 # which can omit the platform-specific rollup binary (e.g. musl on Alpine).

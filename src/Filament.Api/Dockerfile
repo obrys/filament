@@ -13,9 +13,11 @@ RUN dotnet publish src/Filament.Api/Filament.Api.csproj -c Release -o /out \
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
+ARG GIT_COMMIT=dev
 ENV ASPNETCORE_URLS=http://+:8080 \
     DOTNET_gcServer=0 \
-    DOTNET_GCConserveMemory=9
+    DOTNET_GCConserveMemory=9 \
+    APP_VERSION=$GIT_COMMIT
 EXPOSE 8080
 COPY --from=build /out ./
 ENTRYPOINT ["dotnet", "Filament.Api.dll"]

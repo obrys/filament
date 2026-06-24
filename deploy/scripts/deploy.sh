@@ -25,11 +25,16 @@ echo "==> Using container engine: $ENGINE"
 API_TAG="localhost/filament-api:latest"
 WEB_TAG="localhost/filament-web:latest"
 
+# Version stamp baked into both images so the running client can detect a redeploy
+# and reload itself. Uses the current commit (with -dirty suffix for uncommitted work).
+GIT_COMMIT="$(git describe --always --dirty --abbrev=8 2>/dev/null || echo dev)"
+echo "==> Build version: $GIT_COMMIT"
+
 echo "==> Building API image"
-"$ENGINE" build -t "$API_TAG" -f src/Filament.Api/Dockerfile .
+"$ENGINE" build --build-arg "GIT_COMMIT=$GIT_COMMIT" -t "$API_TAG" -f src/Filament.Api/Dockerfile .
 
 echo "==> Building Web image"
-"$ENGINE" build -t "$WEB_TAG" -f web/Dockerfile web
+"$ENGINE" build --build-arg "GIT_COMMIT=$GIT_COMMIT" -t "$WEB_TAG" -f web/Dockerfile web
 
 echo "==> Streaming API image to $TARGET"
 "$ENGINE" save "$API_TAG" | ssh "$TARGET" "podman load"

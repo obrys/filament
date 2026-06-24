@@ -1,3 +1,5 @@
+import { observeVersion } from '../version'
+
 export type FilamentType = {
   id: string
   brand: string
@@ -52,6 +54,7 @@ async function http<T>(url: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
   })
+  observeVersion(r.headers.get('X-App-Version'))
   if (!r.ok) {
     let msg = `${r.status} ${r.statusText}`
     try { const body = await r.json(); if (body?.error) msg = body.error } catch { /* */ }
