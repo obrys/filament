@@ -23,7 +23,10 @@ Environment=DOTNET_GCHeapHardLimit=134217728
 [Service]
 Restart=on-failure
 RestartSec=10
-TimeoutStopSec=20
+# The app closes WebSockets and shuts down in well under a second (see
+# ChangeBroker.ShutdownAsync), so a short stop timeout keeps redeploys snappy
+# while still acting as a safety net if a shutdown ever stalls.
+TimeoutStopSec=10
 MemoryHigh=250M
 MemoryMax=512M
 

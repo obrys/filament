@@ -8,11 +8,16 @@ Image=localhost/filament-web:latest
 ContainerName=filament-web
 Network=filament.network
 PublishPort=8081:8080
+# The nginx image sets STOPSIGNAL=SIGQUIT (graceful shutdown), which makes nginx
+# wait for the long-lived proxied /ws/changes connections to drain — so a restart
+# blocks until TimeoutStopSec and clients hang. SIGTERM triggers nginx fast
+# shutdown instead, so a redeploy restarts immediately and clients just reconnect.
+StopSignal=SIGTERM
 
 [Service]
 Restart=on-failure
 RestartSec=10
-TimeoutStopSec=15
+TimeoutStopSec=10
 MemoryHigh=20M
 MemoryMax=32M
 
