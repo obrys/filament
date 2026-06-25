@@ -20,6 +20,10 @@ Environment=DOTNET_gcServer=0
 Environment=DOTNET_GCConserveMemory=9
 Environment=DOTNET_GCHeapHardLimit=134217728
 
+# If graceful shutdown ever stalls, podman SIGKILLs the container after this many
+# seconds (podman rm -f honors it), so a restart can't hang on the stop timeout.
+StopTimeout=3
+
 [Service]
 Restart=on-failure
 RestartSec=10

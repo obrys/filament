@@ -13,6 +13,9 @@ PublishPort=8081:8080
 # blocks until TimeoutStopSec and clients hang. SIGTERM triggers nginx fast
 # shutdown instead, so a redeploy restarts immediately and clients just reconnect.
 StopSignal=SIGTERM
+# Hard cap on stop time: podman SIGKILLs after this many seconds if nginx hasn't
+# exited, so a restart can never hang on the systemd stop timeout.
+StopTimeout=3
 
 [Service]
 Restart=on-failure

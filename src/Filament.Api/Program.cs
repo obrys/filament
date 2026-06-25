@@ -34,8 +34,10 @@ builder.Services.AddSingleton<LabelPdfGenerator>();
 builder.Services.AddSingleton<ShutdownState>();
 
 // Safety net: if anything stalls on shutdown, give up well before the Quadlet's
-// TimeoutStopSec (20s) SIGKILLs us, so restarts stay fast and clean.
-builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(10));
+// StopTimeout/TimeoutStopSec SIGKILLs us, so restarts stay fast and clean. The WebSocket
+// teardown (ChangeBroker.ShutdownAsync) completes in well under a second, so a short
+// timeout here only ever truncates a genuinely stuck shutdown.
+builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(3));
 
 var app = builder.Build();
 
