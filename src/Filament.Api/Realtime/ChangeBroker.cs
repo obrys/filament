@@ -47,6 +47,12 @@ public sealed class ChangeBroker : IChangeNotifier, IDisposable
             }
         }
         catch (OperationCanceledException) { }
+        catch (WebSocketException ex)
+        {
+            // Clients routinely vanish without a close handshake (tab closed, network
+            // drop, server restart). That's expected — log it quietly without a stack trace.
+            ChangeBrokerLog.ClientClosedAbruptly(_logger, id, ex.Message);
+        }
         catch (Exception ex)
         {
             ChangeBrokerLog.ClientError(_logger, id, ex);

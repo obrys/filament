@@ -15,6 +15,12 @@ internal static partial class ChangeBrokerLog
     public static partial void ClientError(ILogger logger, Guid id, Exception exception);
 
     [LoggerMessage(
+        EventId = 1003,
+        Level = LogLevel.Debug,
+        Message = "WS client {Id} closed abruptly: {Reason}")]
+    public static partial void ClientClosedAbruptly(ILogger logger, Guid id, string reason);
+
+    [LoggerMessage(
         EventId = 1002,
         Level = LogLevel.Information,
         Message = "WS client disconnected: {Id} ({Count} total)")]
