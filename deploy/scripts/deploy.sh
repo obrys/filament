@@ -48,6 +48,25 @@ rsync -av --delete deploy/quadlets/ "$TARGET":~/.config/containers/systemd/
 echo "==> Reloading systemd and restarting services"
 ssh "$TARGET" bash <<'REMOTE'
 set -euo pipefail
+
+# A non-interactive SSH command ("ssh host bash") does NOT export the variables that
+# `systemctl --user` needs to find the per-user systemd manager. Without these the
+# command connects to nothing and silently no-ops — which is why restarts work from an
+# interactive console but not from this script. Set them explicitly.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR}/bus}"
+
+# Fail loudly (instead of silently no-op'ing) if the user manager is unreachable. The
+# usual cause is that lingering is not enabled, so the manager isn't running when no
+# interactive session is open. Fix once on the server: loginctl enable-linger "$USER"
+if ! systemctl --user show-environment >/dev/null 2>&1; then
+    echo "ERROR: cannot reach the per-user systemd manager over SSH." >&2
+    echo "       XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >&2
+    echo "       Enable lingering once on the server, then re-run the deploy:" >&2
+    echo "         loginctl enable-linger \"\$USER\"" >&2
+    exit 1
+fi
+
 systemctl --user daemon-reload
 
 # Ensure db is up first; start everything if this is the first run.
@@ -60,6 +79,14 @@ done
 
 systemctl --user restart filament-api.service
 systemctl --user restart filament-web.service
+
+# Confirm the containers were actually recreated (the restart really took effect).
+# If an ID is unchanged the restart silently did nothing — surface it instead of
+# reporting a successful deploy.
+for svc in filament-api filament-web; do
+    cid="$(podman inspect -f '{{.Id}}' "$svc" 2>/dev/null | cut -c1-12 || true)"
+    echo "==> $svc container: ${cid:-<not running>}"
+done
 
 # Verify the API actually came up healthy. With migration fail-fast, a failed
 # migration crashes the container (Restart=on-failure), so a crash-loop would

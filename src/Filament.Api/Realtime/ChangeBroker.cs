@@ -95,48 +95,37 @@ public sealed class ChangeBroker : IChangeNotifier, IDisposable
     /// </summary>
     public async Task ShutdownAsync()
     {
-        // Tell every client we're going down so they can show a notice and start polling
-        // for the new instance, before we close the sockets out from under them.
-        await NotifyShutdownAsync();
+        // Notify + close every client in PARALLEL with a tight per-socket bound. Doing this
+        // sequentially meant a few slow or stuck sockets (e.g. proxied through nginx, or a
+        // backgrounded browser tab whose TCP window is closed) could each block for up to a
+        // couple of seconds and add up to the host's shutdown timeout. In parallel, the whole
+        // teardown is bounded by a single timeout regardless of how many clients are connected.
+        var sockets = _sockets.Values.ToArray();
+        await Task.WhenAll(Array.ConvertAll(sockets, NotifyAndCloseAsync));
 
-        foreach (var (_, sock) in _sockets)
-        {
-            try
-            {
-                if (sock.State == WebSocketState.Open)
-                {
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                    await sock.CloseOutputAsync(
-                        WebSocketCloseStatus.EndpointUnavailable, "Server restarting", cts.Token);
-                }
-            }
-            catch
-            {
-                // Best effort — the connection may already be gone.
-            }
-        }
-
-        // Unblock every receive loop so the in-flight requests complete immediately.
+        // Unblock every receive loop so the in-flight WebSocket requests complete immediately
+        // and the host doesn't wait on them. This is what actually lets the process exit fast.
         await _shutdownCts.CancelAsync();
     }
 
-    private async Task NotifyShutdownAsync()
+    private static async Task NotifyAndCloseAsync(WebSocket sock)
     {
-        const string payload = """{"type":"server-shutdown"}""";
-        foreach (var (_, sock) in _sockets)
+        try
         {
-            try
-            {
-                if (sock.State == WebSocketState.Open)
-                {
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
-                    await SendAsync(sock, payload, cts.Token);
-                }
-            }
-            catch
-            {
-                // Best effort — the client may already be gone.
-            }
+            if (sock.State != WebSocketState.Open)
+                return;
+
+            // Tell the client we're going down (so it can show a notice and start polling for
+            // the new instance), then send a close frame so well-behaved clients close cleanly.
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(750));
+            await SendAsync(sock, """{"type":"server-shutdown"}""", cts.Token);
+            await sock.CloseOutputAsync(
+                WebSocketCloseStatus.EndpointUnavailable, "Server restarting", cts.Token);
+        }
+        catch
+        {
+            // Best effort — the client may already be gone or too slow to drain. The
+            // receive-loop cancellation in ShutdownAsync guarantees the request still ends.
         }
     }
 
