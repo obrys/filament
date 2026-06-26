@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { emitServerRestarting } from '../version';
 const listeners = new Set();
 export function onChange(cb) {
     listeners.add(cb);
@@ -35,6 +36,11 @@ export function useChangeStream() {
                     if (msg.type === 'change') {
                         for (const cb of listeners)
                             cb(msg);
+                    }
+                    else if (msg.type === 'server-shutdown') {
+                        // Backend is going down for a redeploy/restart. Let the VersionGate take over:
+                        // it polls /api/version and reloads if the returned version changed.
+                        emitServerRestarting();
                     }
                 }
                 catch { /* ignore */ }
