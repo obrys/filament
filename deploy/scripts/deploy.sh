@@ -46,7 +46,14 @@ echo "==> Syncing Quadlet units"
 rsync -av --delete deploy/quadlets/ "$TARGET":~/.config/containers/systemd/
 
 echo "==> Reloading systemd and restarting services"
-ssh "$TARGET" bash <<'REMOTE'
+# IMPORTANT: do not pipe the heredoc straight into `bash`. With `ssh host bash`,
+# the remote bash reads this script from stdin, and any command in the body that
+# touches stdin (podman/systemctl interacting with conmon/sdnotify on the server)
+# can swallow the remaining script lines — bash then hits EOF and exits 0, silently
+# skipping everything after it while still reporting success. Slurp the whole script
+# into a temp file first, then run it with stdin detached from /dev/null so no inner
+# command can ever consume the script.
+ssh "$TARGET" 'tmp="$(mktemp)"; cat >"$tmp"; bash "$tmp" </dev/null; rc=$?; rm -f "$tmp"; exit "$rc"' <<'REMOTE'
 set -euo pipefail
 
 # A non-interactive SSH command ("ssh host bash") does NOT export the variables that
@@ -67,7 +74,9 @@ if ! systemctl --user show-environment >/dev/null 2>&1; then
     exit 1
 fi
 
+echo "Reloading daemon"
 systemctl --user daemon-reload
+echo "Daemon reloaded"
 
 # Ensure db is up first; start everything if this is the first run.
 systemctl --user start filament-db.service
@@ -77,8 +86,12 @@ for i in {1..30}; do
     sleep 2
 done
 
+echo "Restarting filament-api service"
 systemctl --user restart filament-api.service
+echo "Restarted filament-api service"
+echo "Restarting filament-web service"
 systemctl --user restart filament-web.service
+echo "Restarted filament-web service"
 
 # Confirm the containers were actually recreated (the restart really took effect).
 # If an ID is unchanged the restart silently did nothing — surface it instead of
@@ -104,7 +117,7 @@ done
 systemctl --user --no-pager status \
     filament-db.service \
     filament-api.service \
-    filament-web.service | head -40
+    filament-web.service || true
 
 if [[ "$healthy" -ne 1 ]]; then
     echo "ERROR: API did not become healthy within ~60s. Recent API logs:" >&2
