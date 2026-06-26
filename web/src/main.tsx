@@ -7,6 +7,7 @@ import { Spools } from './pages/Spools'
 import { SpoolDetail } from './pages/SpoolDetail'
 import { useChangeStream } from './realtime/useChangeStream'
 import { VersionGate } from './realtime/VersionGate'
+import { VersionBadge } from './components/VersionBadge'
 import './styles.css'
 
 function App() {
@@ -30,6 +31,7 @@ function App() {
           <Route path="/spools/:id" element={<SpoolDetail />} />
         </Routes>
       </main>
+      <VersionBadge />
     </BrowserRouter>
   )
 }

@@ -1,8 +1,10 @@
+import { observeVersion } from '../version';
 async function http(url, init) {
     const r = await fetch(url, {
         ...init,
         headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     });
+    observeVersion(r.headers.get('X-App-Version'));
     if (!r.ok) {
         let msg = `${r.status} ${r.statusText}`;
         try {

@@ -26,8 +26,18 @@ API_TAG="localhost/filament-api:latest"
 WEB_TAG="localhost/filament-web:latest"
 
 # Version stamp baked into both images so the running client can detect a redeploy
-# and reload itself. Uses the current commit (with -dirty suffix for uncommitted work).
-GIT_COMMIT="$(git describe --always --dirty --abbrev=8 2>/dev/null || echo dev)"
+# and reload itself. Uses the current commit; if there are uncommitted changes the
+# stamp gets a "-dirty-<hash>" suffix where <hash> is the first 6 characters of the
+# SHA-256 of `git diff HEAD`. This makes every dirty build uniquely and repeatably
+# identifiable — the suffix changes whenever the uncommitted diff changes.
+_base_commit="$(git describe --always --dirty --abbrev=8 2>/dev/null || echo dev)"
+if [[ "$_base_commit" == *-dirty ]]; then
+  _dirty_hash="$(git diff HEAD | sha256sum | cut -c1-6)"
+  GIT_COMMIT="${_base_commit}-${_dirty_hash}"
+else
+  GIT_COMMIT="$_base_commit"
+fi
+unset _base_commit _dirty_hash
 echo "==> Build version: $GIT_COMMIT"
 
 echo "==> Building API image"
