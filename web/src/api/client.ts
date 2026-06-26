@@ -49,6 +49,22 @@ export type DashboardSummary = {
 
 export type DailyUsage = { day: string; consumedGrams: number }
 
+export type FacetOption = { value: string; count: number }
+export type Facets = {
+  brand: FacetOption[]
+  material: FacetOption[]
+  type: FacetOption[]
+  color: FacetOption[]
+}
+/** The four shared facet fields, in display order. */
+export const FACET_FIELDS = ['brand', 'material', 'type', 'color'] as const
+export type FacetField = (typeof FACET_FIELDS)[number]
+/** A selection is a list of chosen values per facet field. */
+export type FacetSelection = Record<FacetField, string[]>
+
+export type FilamentTypeList = { items: FilamentType[]; facets: Facets }
+export type SpoolList = { items: Spool[]; facets: Facets }
+
 async function http<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, {
     ...init,
@@ -64,9 +80,21 @@ async function http<T>(url: string, init?: RequestInit): Promise<T> {
   return r.json() as Promise<T>
 }
 
+function appendFacets(p: URLSearchParams, sel?: Partial<FacetSelection>) {
+  if (!sel) return
+  for (const field of FACET_FIELDS) {
+    for (const value of sel[field] ?? []) p.append(field, value)
+  }
+}
+
 export const api = {
   types: {
-    list: () => http<FilamentType[]>('/api/filament-types'),
+    list: (filters?: Partial<FacetSelection>) => {
+      const p = new URLSearchParams()
+      appendFacets(p, filters)
+      const qs = p.toString()
+      return http<FilamentTypeList>(`/api/filament-types${qs ? `?${qs}` : ''}`)
+    },
     get: (id: string) => http<FilamentType>(`/api/filament-types/${id}`),
     create: (body: Partial<FilamentType>) =>
       http<FilamentType>('/api/filament-types', { method: 'POST', body: JSON.stringify(body) }),
@@ -75,12 +103,13 @@ export const api = {
     delete: (id: string) => http<void>(`/api/filament-types/${id}`, { method: 'DELETE' }),
   },
   spools: {
-    list: (opts?: { filamentTypeId?: string; includeFinished?: boolean }) => {
+    list: (opts?: { filamentTypeId?: string; includeFinished?: boolean; filters?: Partial<FacetSelection> }) => {
       const p = new URLSearchParams()
       if (opts?.filamentTypeId) p.set('filamentTypeId', opts.filamentTypeId)
       if (opts?.includeFinished) p.set('includeFinished', 'true')
+      appendFacets(p, opts?.filters)
       const qs = p.toString()
-      return http<Spool[]>(`/api/spools${qs ? `?${qs}` : ''}`)
+      return http<SpoolList>(`/api/spools${qs ? `?${qs}` : ''}`)
     },
     get: (id: string) => http<Spool>(`/api/spools/${id}`),
     events: (id: string) => http<SpoolEvent[]>(`/api/spools/${id}/events`),

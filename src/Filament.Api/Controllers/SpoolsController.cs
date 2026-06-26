@@ -2,6 +2,7 @@ using Filament.Api.Dtos;
 using Filament.Api.Mapping;
 using Filament.Core.Abstractions;
 using Filament.Core.Domain;
+using Filament.Core.Faceting;
 using Filament.Core.Identifiers;
 using Filament.Core.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -24,9 +25,13 @@ public sealed class SpoolsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IReadOnlyList<SpoolDto>> List(
+    public async Task<SpoolListDto> List(
         [FromQuery] string? filamentTypeId,
         [FromQuery] bool includeFinished,
+        [FromQuery] string[]? brand,
+        [FromQuery] string[]? material,
+        [FromQuery] string[]? type,
+        [FromQuery] string[]? color,
         CancellationToken ct)
     {
         var items = await _spools.ListAsync(filamentTypeId, includeFinished, ct);
@@ -38,10 +43,23 @@ public sealed class SpoolsController : ControllerBase
             var t = await _types.GetAsync(tid, ct);
             if (t is not null) types[tid] = t;
         }
-        return items.Where(s => types.ContainsKey(s.FilamentTypeId))
-                    .Select(s => s.ToDto(types[s.FilamentTypeId]))
-                    .ToList();
+
+        // The facet universe is every spool whose filament type resolves; a spool inherits the
+        // facet attributes of its type. Faceting happens on the server — the client only renders.
+        var universe = items.Where(s => types.ContainsKey(s.FilamentTypeId)).ToList();
+        var selection = FacetSelection.From(brand, material, type, color);
+        var result = FacetEngine.Apply(
+            universe,
+            s => Attrs(types[s.FilamentTypeId]),
+            selection);
+
+        return new SpoolListDto(
+            result.Items.Select(s => s.ToDto(types[s.FilamentTypeId])).ToList(),
+            result.Facets.ToDto());
     }
+
+    private static FacetAttributes Attrs(FilamentType t) =>
+        new(t.Brand, t.Material, t.Type, t.Color);
 
     [HttpGet("{id}")]
     public async Task<ActionResult<SpoolDto>> Get(string id, CancellationToken ct)
