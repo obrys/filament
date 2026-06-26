@@ -18,6 +18,7 @@ ENV ASPNETCORE_URLS=http://+:8080 \
     DOTNET_gcServer=0 \
     DOTNET_GCConserveMemory=9 \
     APP_VERSION=$GIT_COMMIT
+RUN echo "$GIT_COMMIT" > /app/VERSION
 EXPOSE 8080
 COPY --from=build /out ./
 ENTRYPOINT ["dotnet", "Filament.Api.dll"]

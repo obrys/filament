@@ -13,4 +13,6 @@ RUN npm run build
 FROM docker.io/library/nginx:1.27-alpine AS runtime
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /src/dist /usr/share/nginx/html
+ARG GIT_COMMIT=dev
+RUN echo "$GIT_COMMIT" > /usr/share/nginx/html/VERSION
 EXPOSE 8080
