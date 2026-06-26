@@ -1,22 +1,40 @@
 import { useEffect, useState } from 'react'
-import { api, type FilamentType } from '../api/client'
+import { api, type FilamentType, type Facets } from '../api/client'
 import { onChange } from '../realtime/useChangeStream'
+import { FilterBar } from '../components/FilterBar'
+import { useFacetFilters } from '../hooks/useFacetFilters'
+
+const EMPTY_FACETS: Facets = { brand: [], material: [], type: [], color: [] }
 
 export function FilamentTypes() {
   const [types, setTypes] = useState<FilamentType[]>([])
+  const [facets, setFacets] = useState<Facets>(EMPTY_FACETS)
   const [showForm, setShowForm] = useState(false)
+  const { selection, toggleOption, removeOption, clearAll } = useFacetFilters()
 
-  const load = () => api.types.list().then(setTypes).catch(console.error)
+  const load = () =>
+    api.types.list(selection)
+      .then(r => { setTypes(r.items); setFacets(r.facets) })
+      .catch(console.error)
   useEffect(() => {
     load()
     return onChange(m => { if (m.resource === 'filament-type') load() })
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(selection)])
 
   return (
     <>
       <h1>Filament Types</h1>
       <button onClick={() => setShowForm(s => !s)}>{showForm ? 'Close' : 'New type'}</button>
       {showForm && <NewTypeForm onCreated={() => { setShowForm(false); load() }} />}
+
+      <FilterBar
+        facets={facets}
+        selection={selection}
+        onToggle={toggleOption}
+        onRemove={removeOption}
+        onClear={clearAll}
+      />
 
       <div className="card" style={{ marginTop: '1rem', padding: 0, overflowX: 'auto' }}>
         <table>

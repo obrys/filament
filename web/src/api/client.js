@@ -1,4 +1,6 @@
 import { observeVersion } from '../version';
+/** The four shared facet fields, in display order. */
+export const FACET_FIELDS = ['brand', 'material', 'type', 'color'];
 async function http(url, init) {
     const r = await fetch(url, {
         ...init,
@@ -19,9 +21,22 @@ async function http(url, init) {
         return undefined;
     return r.json();
 }
+function appendFacets(p, sel) {
+    if (!sel)
+        return;
+    for (const field of FACET_FIELDS) {
+        for (const value of sel[field] ?? [])
+            p.append(field, value);
+    }
+}
 export const api = {
     types: {
-        list: () => http('/api/filament-types'),
+        list: (filters) => {
+            const p = new URLSearchParams();
+            appendFacets(p, filters);
+            const qs = p.toString();
+            return http(`/api/filament-types${qs ? `?${qs}` : ''}`);
+        },
         get: (id) => http(`/api/filament-types/${id}`),
         create: (body) => http('/api/filament-types', { method: 'POST', body: JSON.stringify(body) }),
         update: (id, body) => http(`/api/filament-types/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
@@ -34,6 +49,7 @@ export const api = {
                 p.set('filamentTypeId', opts.filamentTypeId);
             if (opts?.includeFinished)
                 p.set('includeFinished', 'true');
+            appendFacets(p, opts?.filters);
             const qs = p.toString();
             return http(`/api/spools${qs ? `?${qs}` : ''}`);
         },

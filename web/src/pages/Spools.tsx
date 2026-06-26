@@ -1,23 +1,33 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, type Spool, type FilamentType } from '../api/client'
+import { api, type Spool, type FilamentType, type Facets } from '../api/client'
 import { onChange } from '../realtime/useChangeStream'
+import { FilterBar } from '../components/FilterBar'
+import { useFacetFilters } from '../hooks/useFacetFilters'
+
+const EMPTY_FACETS: Facets = { brand: [], material: [], type: [], color: [] }
 
 export function Spools() {
   const [spools, setSpools] = useState<Spool[]>([])
+  const [facets, setFacets] = useState<Facets>(EMPTY_FACETS)
   const [types, setTypes] = useState<Record<string, FilamentType>>({})
   const [includeFinished, setIncludeFinished] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showForm, setShowForm] = useState(false)
+  const { selection, toggleOption, removeOption, clearAll } = useFacetFilters()
 
   const load = () => {
-    api.spools.list({ includeFinished }).then(setSpools).catch(console.error)
-    api.types.list().then(list => setTypes(Object.fromEntries(list.map(t => [t.id, t])))).catch(console.error)
+    api.spools.list({ includeFinished, filters: selection })
+      .then(r => { setSpools(r.items); setFacets(r.facets) })
+      .catch(console.error)
+    // The type map must cover every spool regardless of the active filter, so load all types.
+    api.types.list().then(r => setTypes(Object.fromEntries(r.items.map(t => [t.id, t])))).catch(console.error)
   }
   useEffect(() => {
     load()
     return onChange(m => { if (m.resource === 'spool' || m.resource === 'filament-type') load() })
-  }, [includeFinished])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeFinished, JSON.stringify(selection)])
 
   const toggle = (id: string) => {
     const next = new Set(selected)
@@ -41,6 +51,14 @@ export function Spools() {
       </div>
 
       {showForm && <NewSpoolForm types={Object.values(types)} onCreated={() => { setShowForm(false); load() }} />}
+
+      <FilterBar
+        facets={facets}
+        selection={selection}
+        onToggle={toggleOption}
+        onRemove={removeOption}
+        onClear={clearAll}
+      />
 
       <div className="card" style={{ marginTop: '1rem', padding: 0, overflowX: 'auto' }}>
         <table>

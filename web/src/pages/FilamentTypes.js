@@ -2,16 +2,24 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { onChange } from '../realtime/useChangeStream';
+import { FilterBar } from '../components/FilterBar';
+import { useFacetFilters } from '../hooks/useFacetFilters';
+const EMPTY_FACETS = { brand: [], material: [], type: [], color: [] };
 export function FilamentTypes() {
     const [types, setTypes] = useState([]);
+    const [facets, setFacets] = useState(EMPTY_FACETS);
     const [showForm, setShowForm] = useState(false);
-    const load = () => api.types.list().then(setTypes).catch(console.error);
+    const { selection, toggleOption, removeOption, clearAll } = useFacetFilters();
+    const load = () => api.types.list(selection)
+        .then(r => { setTypes(r.items); setFacets(r.facets); })
+        .catch(console.error);
     useEffect(() => {
         load();
         return onChange(m => { if (m.resource === 'filament-type')
             load(); });
-    }, []);
-    return (_jsxs(_Fragment, { children: [_jsx("h1", { children: "Filament Types" }), _jsx("button", { onClick: () => setShowForm(s => !s), children: showForm ? 'Close' : 'New type' }), showForm && _jsx(NewTypeForm, { onCreated: () => { setShowForm(false); load(); } }), _jsx("div", { className: "card", style: { marginTop: '1rem', padding: 0, overflowX: 'auto' }, children: _jsxs("table", { children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { children: "ID" }), _jsx("th", { children: "Brand" }), _jsx("th", { children: "Material" }), _jsx("th", { children: "Type" }), _jsx("th", { children: "Color" }), _jsx("th", { children: "Net (g)" }), _jsx("th", { children: "Empty (g)" }), _jsx("th", {})] }) }), _jsx("tbody", { children: types.map(t => (_jsxs("tr", { children: [_jsx("td", { "data-label": "ID", children: _jsx("span", { className: "id-pill", children: t.id }) }), _jsx("td", { "data-label": "Brand", children: t.brand }), _jsx("td", { "data-label": "Material", children: t.material }), _jsx("td", { "data-label": "Type", children: t.type }), _jsxs("td", { "data-label": "Color", children: [t.colorHex && _jsx("span", { className: "swatch", style: { background: t.colorHex } }), " ", t.color] }), _jsx("td", { "data-label": "Net", children: t.defaultNetWeightGrams }), _jsx("td", { "data-label": "Empty", children: t.emptySpoolWeightGrams }), _jsx("td", { children: _jsx("button", { className: "ghost", onClick: () => deleteType(t.id, load), children: "Delete" }) })] }, t.id))) })] }) })] }));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [JSON.stringify(selection)]);
+    return (_jsxs(_Fragment, { children: [_jsx("h1", { children: "Filament Types" }), _jsx("button", { onClick: () => setShowForm(s => !s), children: showForm ? 'Close' : 'New type' }), showForm && _jsx(NewTypeForm, { onCreated: () => { setShowForm(false); load(); } }), _jsx(FilterBar, { facets: facets, selection: selection, onToggle: toggleOption, onRemove: removeOption, onClear: clearAll }), _jsx("div", { className: "card", style: { marginTop: '1rem', padding: 0, overflowX: 'auto' }, children: _jsxs("table", { children: [_jsx("thead", { children: _jsxs("tr", { children: [_jsx("th", { children: "ID" }), _jsx("th", { children: "Brand" }), _jsx("th", { children: "Material" }), _jsx("th", { children: "Type" }), _jsx("th", { children: "Color" }), _jsx("th", { children: "Net (g)" }), _jsx("th", { children: "Empty (g)" }), _jsx("th", {})] }) }), _jsx("tbody", { children: types.map(t => (_jsxs("tr", { children: [_jsx("td", { "data-label": "ID", children: _jsx("span", { className: "id-pill", children: t.id }) }), _jsx("td", { "data-label": "Brand", children: t.brand }), _jsx("td", { "data-label": "Material", children: t.material }), _jsx("td", { "data-label": "Type", children: t.type }), _jsxs("td", { "data-label": "Color", children: [t.colorHex && _jsx("span", { className: "swatch", style: { background: t.colorHex } }), " ", t.color] }), _jsx("td", { "data-label": "Net", children: t.defaultNetWeightGrams }), _jsx("td", { "data-label": "Empty", children: t.emptySpoolWeightGrams }), _jsx("td", { children: _jsx("button", { className: "ghost", onClick: () => deleteType(t.id, load), children: "Delete" }) })] }, t.id))) })] }) })] }));
 }
 async function deleteType(id, reload) {
     if (!confirm(`Delete filament type ${id}?`))

@@ -1,5 +1,6 @@
 using Filament.Api.Dtos;
 using Filament.Core.Domain;
+using Filament.Core.Faceting;
 using Filament.Core.Services;
 
 namespace Filament.Api.Mapping;
@@ -24,4 +25,12 @@ internal static class DtoMapping
     public static SpoolEventDto ToDto(this SpoolEvent e, int remainingAfterGrams) => new(
         e.Id, e.SpoolId, e.Kind.ToString(), e.DeltaGrams, remainingAfterGrams,
         e.ProjectName, e.ProjectUrl, e.Notes, e.OccurredAt);
+
+    public static FacetsDto ToDto(this Facets f) => new(
+        f.Brand.Select(ToDto).ToList(),
+        f.Material.Select(ToDto).ToList(),
+        f.Type.Select(ToDto).ToList(),
+        f.Color.Select(ToDto).ToList());
+
+    private static FacetOptionDto ToDto(FacetOption o) => new(o.Value, o.Count);
 }

@@ -2,7 +2,9 @@ using Filament.Api.Dtos;
 using Filament.Api.Mapping;
 using Filament.Core.Abstractions;
 using Filament.Core.Domain;
+using Filament.Core.Faceting;
 using Filament.Core.Identifiers;
+using Filament.Core.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Filament.Api.Controllers;
@@ -21,10 +23,22 @@ public sealed class FilamentTypesController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IReadOnlyList<FilamentTypeDto>> List(CancellationToken ct)
+    public async Task<FilamentTypeListDto> List(
+        [FromQuery] string[]? brand,
+        [FromQuery] string[]? material,
+        [FromQuery] string[]? type,
+        [FromQuery] string[]? color,
+        CancellationToken ct)
     {
         var items = await _repo.ListAsync(ct);
-        return items.Select(t => t.ToDto()).ToList();
+        var selection = FacetSelection.From(brand, material, type, color);
+        var result = FacetEngine.Apply(
+            items,
+            t => new FacetAttributes(t.Brand, t.Material, t.Type, t.Color),
+            selection);
+        return new FilamentTypeListDto(
+            result.Items.Select(t => t.ToDto()).ToList(),
+            result.Facets.ToDto());
     }
 
     [HttpGet("{id}")]

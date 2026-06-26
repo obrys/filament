@@ -78,3 +78,21 @@ public sealed record DashboardSummaryDto(
     int TotalRemainingGrams);
 
 public sealed record DailyUsageDto(DateOnly Day, int ConsumedGrams);
+
+// --- Faceted filtering ---
+
+/// <summary>A facet value plus how many items it would yield under the other active facets.</summary>
+public sealed record FacetOptionDto(string Value, int Count);
+
+/// <summary>The option breakdown for all four shared facets.</summary>
+public sealed record FacetsDto(
+    IReadOnlyList<FacetOptionDto> Brand,
+    IReadOnlyList<FacetOptionDto> Material,
+    IReadOnlyList<FacetOptionDto> Type,
+    IReadOnlyList<FacetOptionDto> Color);
+
+/// <summary>Filtered filament types together with their facet breakdown.</summary>
+public sealed record FilamentTypeListDto(IReadOnlyList<FilamentTypeDto> Items, FacetsDto Facets);
+
+/// <summary>Filtered spools together with their facet breakdown.</summary>
+public sealed record SpoolListDto(IReadOnlyList<SpoolDto> Items, FacetsDto Facets);
