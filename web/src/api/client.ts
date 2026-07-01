@@ -33,11 +33,26 @@ export type SpoolEvent = {
   spoolId: string
   kind: 'Created' | 'Opened' | 'Print' | 'Adjustment' | 'Finished'
   deltaGrams: number
-  remainingAfterGrams: number
+  remainingAfterGrams: number | null
+  isDisabled: boolean
   projectName?: string | null
   projectUrl?: string | null
   notes?: string | null
   occurredAt: string
+}
+
+export type SpoolReevalDiff = {
+  spoolId: string
+  oldStatus: string
+  newStatus: string
+  oldRemainingGrams: number
+  newRemainingGrams: number
+}
+
+export type ReevaluateResult = {
+  totalSpools: number
+  changedSpools: number
+  differences: SpoolReevalDiff[]
 }
 
 export type DashboardSummary = {
@@ -115,10 +130,17 @@ export const api = {
     events: (id: string) => http<SpoolEvent[]>(`/api/spools/${id}/events`),
     create: (body: { filamentTypeId: string; initialNetGrams?: number; emptySpoolWeightGramsOverride?: number; notes?: string }) =>
       http<Spool>('/api/spools', { method: 'POST', body: JSON.stringify(body) }),
+    open: (id: string) => http<Spool>(`/api/spools/${id}/open`, { method: 'POST' }),
+    finish: (id: string) => http<Spool>(`/api/spools/${id}/finish`, { method: 'POST' }),
     consume: (id: string, body: { grams: number; projectName?: string; projectUrl?: string; notes?: string }) =>
       http<Spool>(`/api/spools/${id}/consume`, { method: 'POST', body: JSON.stringify(body) }),
     adjust: (id: string, body: { newRemainingGrams: number; notes?: string }) =>
       http<Spool>(`/api/spools/${id}/adjust`, { method: 'POST', body: JSON.stringify(body) }),
+    enableEvent: (id: string, eventId: number) =>
+      http<Spool>(`/api/spools/${id}/events/${eventId}/enable`, { method: 'POST' }),
+    disableEvent: (id: string, eventId: number) =>
+      http<Spool>(`/api/spools/${id}/events/${eventId}/disable`, { method: 'POST' }),
+    reevaluate: () => http<ReevaluateResult>('/api/spools/reevaluate', { method: 'POST' }),
     delete: (id: string) => http<void>(`/api/spools/${id}`, { method: 'DELETE' }),
     labelPdfUrl: (ids: string[]) => `/api/labels?${ids.map(i => `id=${encodeURIComponent(i)}`).join('&')}`,
   },

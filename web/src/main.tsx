@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard'
 import { FilamentTypes } from './pages/FilamentTypes'
 import { Spools } from './pages/Spools'
 import { SpoolDetail } from './pages/SpoolDetail'
+import { SpoolMaintenance } from './pages/SpoolMaintenance'
 import { useChangeStream } from './realtime/useChangeStream'
 import { VersionGate } from './realtime/VersionGate'
 import { VersionBadge } from './components/VersionBadge'
@@ -28,6 +29,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/types" element={<FilamentTypes />} />
           <Route path="/spools" element={<Spools />} />
+          <Route path="/spools/maintenance" element={<SpoolMaintenance />} />
           <Route path="/spools/:id" element={<SpoolDetail />} />
         </Routes>
       </main>

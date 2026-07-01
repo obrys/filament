@@ -3,6 +3,9 @@ import { useParams, Link } from 'react-router-dom'
 import { api, type Spool, type SpoolEvent, type FilamentType } from '../api/client'
 import { onChange } from '../realtime/useChangeStream'
 
+/** Below this fraction of the initial net weight, the Finish action is visually promoted. */
+const LOW_FRACTION = 0.05
+
 export function SpoolDetail() {
   const { id = '' } = useParams()
   const [spool, setSpool] = useState<Spool | null>(null)
@@ -24,6 +27,14 @@ export function SpoolDetail() {
 
   if (!spool || !type) return <p>Loading…</p>
 
+  const act = async (fn: () => Promise<unknown>) => {
+    try { await fn(); await load() } catch (err: any) { alert(err.message) }
+  }
+
+  const lowOnFilament = spool.remainingGrams <= spool.initialNetGrams * LOW_FRACTION
+  // The active (enabled) Finish event, if any — undoing it reopens the spool.
+  const activeFinish = events.find(e => e.kind === 'Finished' && !e.isDisabled)
+
   return (
     <>
       <p><Link to="/spools">← All spools</Link></p>
@@ -40,26 +51,63 @@ export function SpoolDetail() {
         {spool.finishedAt && <div className="muted">Finished {new Date(spool.finishedAt).toLocaleString()}</div>}
       </div>
 
-      {spool.status !== 'Finished' && <ConsumeForm spoolId={spool.id} onDone={load} max={spool.remainingGrams} />}
-      {spool.status !== 'Finished' && <AdjustForm spoolId={spool.id} onDone={load} />}
+      {spool.status === 'Sealed' && (
+        <div className="card">
+          <p style={{ marginTop: 0 }}>This spool is sealed. Open it to start recording prints.</p>
+          <button onClick={() => act(() => api.spools.open(spool.id))}>Open spool</button>
+        </div>
+      )}
+
+      {spool.status === 'Open' && (
+        <>
+          <ConsumeForm spoolId={spool.id} onDone={load} max={spool.remainingGrams} />
+          <AdjustForm spoolId={spool.id} onDone={load} />
+          <div className="card">
+            <h2 style={{ marginTop: 0 }}>Finish spool</h2>
+            <p className="muted" style={{ marginTop: 0 }}>
+              {lowOnFilament
+                ? 'This spool looks nearly empty — mark it finished when done.'
+                : 'Mark this spool as finished. This does not change the remaining weight.'}
+            </p>
+            <button className={lowOnFilament ? 'nudge' : 'ghost'}
+              onClick={() => act(() => api.spools.finish(spool.id))}>Finish spool</button>
+          </div>
+        </>
+      )}
+
+      {spool.status === 'Finished' && activeFinish && (
+        <div className="card">
+          <p style={{ marginTop: 0 }}>This spool is finished.</p>
+          <button className="ghost" onClick={() => act(() => api.spools.disableEvent(spool.id, activeFinish.id))}>
+            Reopen spool
+          </button>
+        </div>
+      )}
 
       <h2>History</h2>
       <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
         <table>
-          <thead><tr><th>When</th><th>Kind</th><th>Δ</th><th>After</th><th>Project</th><th>Notes</th></tr></thead>
+          <thead><tr><th>When</th><th>Kind</th><th>Δ</th><th>After</th><th>Project</th><th>Notes</th><th></th></tr></thead>
           <tbody>
             {events.map(e => (
-              <tr key={e.id}>
+              <tr key={e.id} className={e.isDisabled ? 'event-disabled' : undefined}>
                 <td data-label="When">{new Date(e.occurredAt).toLocaleString()}</td>
                 <td data-label="Kind">{e.kind}</td>
                 <td data-label="Δ">{e.deltaGrams > 0 ? '+' : ''}{e.deltaGrams} g</td>
-                <td data-label="After">{e.remainingAfterGrams} g</td>
+                <td data-label="After">{e.remainingAfterGrams === null ? '—' : `${e.remainingAfterGrams} g`}</td>
                 <td data-label="Project">
                   {e.projectUrl
                     ? <a href={e.projectUrl} target="_blank" rel="noreferrer">{e.projectName ?? e.projectUrl}</a>
                     : (e.projectName ?? '')}
                 </td>
                 <td data-label="Notes">{e.notes ?? ''}</td>
+                <td data-label="">
+                  {e.kind !== 'Created' && (
+                    e.isDisabled
+                      ? <button className="link" onClick={() => act(() => api.spools.enableEvent(spool.id, e.id))}>Redo</button>
+                      : <button className="link" onClick={() => act(() => api.spools.disableEvent(spool.id, e.id))}>Undo</button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

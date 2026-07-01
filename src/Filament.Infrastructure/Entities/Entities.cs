@@ -26,6 +26,9 @@ internal sealed class SpoolEntity
     public int? EmptySpoolWeightGramsOverride { get; set; }
     public int Status { get; set; }
 
+    /// <summary>Cached remaining grams, recomputed from enabled events on every change.</summary>
+    public int RemainingGrams { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? OpenedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
@@ -45,5 +48,9 @@ internal sealed class SpoolEventEntity
     public string? ProjectName { get; set; }
     public string? ProjectUrl { get; set; }
     public string? Notes { get; set; }
+
+    /// <summary>When true the event is undone: shown struck-through but excluded from derivations.</summary>
+    public bool IsDisabled { get; set; }
+
     public DateTimeOffset OccurredAt { get; set; }
 }

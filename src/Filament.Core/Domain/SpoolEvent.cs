@@ -25,5 +25,12 @@ public sealed class SpoolEvent
     public string? ProjectUrl { get; init; }
     public string? Notes { get; init; }
 
+    /// <summary>
+    /// When true the event is "undone": it is displayed (struck through) but excluded from every
+    /// derivation — state, remaining weight and per-event running totals. Toggling this flag is the
+    /// undo/redo mechanism. The <see cref="SpoolEventKind.Created"/> event can never be disabled.
+    /// </summary>
+    public bool IsDisabled { get; set; }
+
     public DateTimeOffset OccurredAt { get; init; } = DateTimeOffset.UtcNow;
 }

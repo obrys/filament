@@ -11,9 +11,11 @@ public sealed class FilamentDbContextDesignTimeFactory : IDesignTimeDbContextFac
 {
     public FilamentDbContext CreateDbContext(string[] args)
     {
+        var conn = Environment.GetEnvironmentVariable("ConnectionStrings__Filament")
+            ?? "Server=localhost;Port=3306;Database=filament;User=filament;Password=filament";
         var options = new DbContextOptionsBuilder<FilamentDbContext>()
             .UseMySql(
-                "Server=localhost;Port=3306;Database=filament;User=filament;Password=filament",
+                conn,
                 new MariaDbServerVersion(new Version(10, 11, 0)))
             .Options;
         return new FilamentDbContext(options);
