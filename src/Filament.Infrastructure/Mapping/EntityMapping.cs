@@ -52,6 +52,7 @@ internal static class EntityMapping
         InitialNetGrams = e.InitialNetGrams,
         EmptySpoolWeightGramsOverride = e.EmptySpoolWeightGramsOverride,
         Status = (SpoolStatus)e.Status,
+        RemainingGrams = e.RemainingGrams,
         CreatedAt = e.CreatedAt,
         OpenedAt = e.OpenedAt,
         FinishedAt = e.FinishedAt,
@@ -65,6 +66,7 @@ internal static class EntityMapping
         InitialNetGrams = d.InitialNetGrams,
         EmptySpoolWeightGramsOverride = d.EmptySpoolWeightGramsOverride,
         Status = (int)d.Status,
+        RemainingGrams = d.RemainingGrams,
         CreatedAt = d.CreatedAt,
         OpenedAt = d.OpenedAt,
         FinishedAt = d.FinishedAt,
@@ -77,6 +79,7 @@ internal static class EntityMapping
         e.InitialNetGrams = d.InitialNetGrams;
         e.EmptySpoolWeightGramsOverride = d.EmptySpoolWeightGramsOverride;
         e.Status = (int)d.Status;
+        e.RemainingGrams = d.RemainingGrams;
         e.OpenedAt = d.OpenedAt;
         e.FinishedAt = d.FinishedAt;
         e.Notes = d.Notes;
@@ -91,6 +94,7 @@ internal static class EntityMapping
         ProjectName = e.ProjectName,
         ProjectUrl = e.ProjectUrl,
         Notes = e.Notes,
+        IsDisabled = e.IsDisabled,
         OccurredAt = e.OccurredAt,
     };
 
@@ -102,6 +106,7 @@ internal static class EntityMapping
         ProjectName = d.ProjectName,
         ProjectUrl = d.ProjectUrl,
         Notes = d.Notes,
+        IsDisabled = d.IsDisabled,
         OccurredAt = d.OccurredAt,
     };
 }

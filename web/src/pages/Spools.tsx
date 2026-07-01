@@ -77,7 +77,11 @@ export function Spools() {
                   <td data-label="Type">
                     {t ? <>{t.colorHex && <span className="swatch" style={{ background: t.colorHex }} />} {t.brand} · {t.material} · {t.type} · {t.color}</> : s.filamentTypeId}
                   </td>
-                  <td data-label="Remaining">{s.remainingGrams} g</td>
+                  <td data-label="Remaining">
+                    {s.status === 'Finished'
+                      ? <abbr title={`Actually ${s.remainingGrams} g remaining`}>0 g</abbr>
+                      : `${s.remainingGrams} g`}
+                  </td>
                   <td data-label="Status">{s.status}</td>
                   <td></td>
                 </tr>
@@ -86,6 +90,10 @@ export function Spools() {
           </tbody>
         </table>
       </div>
+
+      <p className="muted" style={{ marginTop: '1rem', fontSize: '0.95rem' }}>
+        Something look off? <Link to="/spools/maintenance">Re-evaluate spool states</Link>.
+      </p>
     </>
   )
 }

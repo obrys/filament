@@ -65,11 +65,26 @@ public sealed record SpoolEventDto(
     string SpoolId,
     string Kind,
     int DeltaGrams,
-    int RemainingAfterGrams,
+    int? RemainingAfterGrams,
+    bool IsDisabled,
     string? ProjectName,
     string? ProjectUrl,
     string? Notes,
     DateTimeOffset OccurredAt);
+
+/// <summary>A single spool's before/after state from a re-evaluation run.</summary>
+public sealed record SpoolReevalDiffDto(
+    string SpoolId,
+    string OldStatus,
+    string NewStatus,
+    int OldRemainingGrams,
+    int NewRemainingGrams);
+
+/// <summary>Summary of a manual re-evaluation: totals plus every spool that changed.</summary>
+public sealed record ReevaluateResultDto(
+    int TotalSpools,
+    int ChangedSpools,
+    IReadOnlyList<SpoolReevalDiffDto> Differences);
 
 public sealed record DashboardSummaryDto(
     int FilamentTypeCount,

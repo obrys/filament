@@ -1,5 +1,6 @@
 using Filament.Core.Abstractions;
 using Filament.Core.Domain;
+using Filament.Core.Services;
 using Filament.Infrastructure.Entities;
 using Filament.Infrastructure.Mapping;
 using Filament.Infrastructure.Persistence;
@@ -63,13 +64,7 @@ public sealed class SpoolRepository : ISpoolRepository
     public async Task<Spool?> GetAsync(string id, CancellationToken ct = default)
     {
         var e = await _db.Spools.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
-        if (e is null) return null;
-        var delta = await _db.SpoolEvents.AsNoTracking()
-            .Where(ev => ev.SpoolId == id)
-            .SumAsync(ev => (int?)ev.DeltaGrams, ct) ?? 0;
-        var spool = e.ToDomain();
-        spool.RemainingGrams = e.InitialNetGrams + delta;
-        return spool;
+        return e?.ToDomain();
     }
 
     public async Task<IReadOnlyList<Spool>> ListAsync(string? filamentTypeId = null, bool includeFinished = false, CancellationToken ct = default)
@@ -78,20 +73,7 @@ public sealed class SpoolRepository : ISpoolRepository
         if (filamentTypeId is not null) q = q.Where(s => s.FilamentTypeId == filamentTypeId);
         if (!includeFinished) q = q.Where(s => s.Status != (int)SpoolStatus.Finished);
         var entities = await q.OrderByDescending(s => s.CreatedAt).ToListAsync(ct);
-
-        var ids = entities.Select(s => s.Id).ToList();
-        var deltas = await _db.SpoolEvents.AsNoTracking()
-            .Where(ev => ids.Contains(ev.SpoolId))
-            .GroupBy(ev => ev.SpoolId)
-            .Select(g => new { SpoolId = g.Key, Delta = g.Sum(x => x.DeltaGrams) })
-            .ToDictionaryAsync(x => x.SpoolId, x => x.Delta, ct);
-
-        return entities.Select(e =>
-        {
-            var d = e.ToDomain();
-            d.RemainingGrams = e.InitialNetGrams + (deltas.TryGetValue(e.Id, out var delta) ? delta : 0);
-            return d;
-        }).ToList();
+        return entities.Select(EntityMapping.ToDomain).ToList();
     }
 
     public async Task AddAsync(Spool spool, SpoolEvent createdEvent, CancellationToken ct = default)
@@ -128,6 +110,72 @@ public sealed class SpoolRepository : ISpoolRepository
             .ToListAsync(ct);
         return list.Select(EntityMapping.ToDomain).ToList();
     }
+
+    public async Task<Spool?> ApplyLifecycleAsync(string spoolId, LifecyclePlan plan, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        var spool = await _db.Spools.FirstOrDefaultAsync(x => x.Id == spoolId, ct);
+        if (spool is null) return null;
+
+        var events = await _db.SpoolEvents.Where(e => e.SpoolId == spoolId).ToListAsync(ct);
+
+        if (plan.EventToAdd is not null)
+        {
+            var entity = plan.EventToAdd.ToEntity();
+            _db.SpoolEvents.Add(entity);
+            events.Add(entity);
+        }
+        if (plan.EventToEnable is { } enableId)
+        {
+            var target = events.FirstOrDefault(e => e.Id == enableId)
+                ?? throw new InvalidOperationException("Event not found.");
+            target.IsDisabled = false;
+        }
+        if (plan.EventToDisable is { } disableId)
+        {
+            var target = events.FirstOrDefault(e => e.Id == disableId)
+                ?? throw new InvalidOperationException("Event not found.");
+            target.IsDisabled = true;
+        }
+
+        var domainEvents = events.Select(EntityMapping.ToDomain).ToList();
+        var state = SpoolLifecycle.Evaluate(spool.InitialNetGrams, domainEvents);
+        ApplyState(spool, state);
+
+        await _db.SaveChangesAsync(ct);
+        return spool.ToDomain();
+    }
+
+    public async Task<IReadOnlyList<SpoolReevaluation>> ReevaluateAllAsync(CancellationToken ct = default)
+    {
+        var spools = await _db.Spools.ToListAsync(ct);
+        var allEvents = await _db.SpoolEvents.ToListAsync(ct);
+        var bySpool = allEvents.GroupBy(e => e.SpoolId)
+            .ToDictionary(g => g.Key, g => g.Select(EntityMapping.ToDomain).ToList());
+
+        var report = new List<SpoolReevaluation>(spools.Count);
+        foreach (var spool in spools)
+        {
+            var events = bySpool.TryGetValue(spool.Id, out var evs) ? evs : new List<SpoolEvent>();
+            var state = SpoolLifecycle.Evaluate(spool.InitialNetGrams, events);
+            var result = new SpoolReevaluation(
+                spool.Id, (SpoolStatus)spool.Status, state.Status, spool.RemainingGrams, state.RemainingGrams);
+            if (result.Changed)
+                ApplyState(spool, state);
+            report.Add(result);
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return report;
+    }
+
+    private static void ApplyState(SpoolEntity spool, SpoolState state)
+    {
+        spool.Status = (int)state.Status;
+        spool.RemainingGrams = state.RemainingGrams;
+        spool.OpenedAt = state.OpenedAt;
+        spool.FinishedAt = state.FinishedAt;
+    }
 }
 
 public sealed class DashboardRepository : IDashboardRepository
@@ -141,14 +189,9 @@ public sealed class DashboardRepository : IDashboardRepository
         var active = await _db.Spools.Where(s => s.Status != (int)SpoolStatus.Finished).CountAsync(ct);
         var finished = await _db.Spools.Where(s => s.Status == (int)SpoolStatus.Finished).CountAsync(ct);
 
-        // Remaining is derived: sum of initial net weights of active spools plus all their event deltas.
-        var activeIds = await _db.Spools.Where(s => s.Status != (int)SpoolStatus.Finished)
-            .Select(s => s.Id).ToListAsync(ct);
-        var totalInitial = await _db.Spools.Where(s => s.Status != (int)SpoolStatus.Finished)
-            .SumAsync(s => (int?)s.InitialNetGrams, ct) ?? 0;
-        var totalDelta = await _db.SpoolEvents.Where(e => activeIds.Contains(e.SpoolId))
-            .SumAsync(e => (int?)e.DeltaGrams, ct) ?? 0;
-        var totalRemaining = totalInitial + totalDelta;
+        // Remaining is the sum of the cached per-spool RemainingGrams of the active spools.
+        var totalRemaining = await _db.Spools.Where(s => s.Status != (int)SpoolStatus.Finished)
+            .SumAsync(s => (int?)s.RemainingGrams, ct) ?? 0;
 
         return new DashboardSummary(typeCount, active, finished, totalRemaining);
     }
@@ -157,7 +200,7 @@ public sealed class DashboardRepository : IDashboardRepository
     {
         var since = DateTimeOffset.UtcNow.AddDays(-days);
         var raw = await _db.SpoolEvents.AsNoTracking()
-            .Where(e => e.OccurredAt >= since && e.DeltaGrams < 0)
+            .Where(e => e.OccurredAt >= since && e.DeltaGrams < 0 && !e.IsDisabled)
             .Select(e => new { e.OccurredAt, e.DeltaGrams })
             .ToListAsync(ct);
         return raw

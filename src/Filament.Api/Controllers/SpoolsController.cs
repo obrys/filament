@@ -77,7 +77,7 @@ public sealed class SpoolsController : ControllerBase
         var spool = await _spools.GetAsync(id, ct);
         if (spool is null) return NotFound();
         var events = await _spools.ListEventsAsync(id, ct);
-        var remainingAfter = SpoolWeightService.ComputeRemainingAfter(spool.InitialNetGrams, events);
+        var remainingAfter = SpoolLifecycle.RunningRemaining(spool.InitialNetGrams, events);
         return Ok(events.Select(e => e.ToDto(remainingAfter[e.Id])).ToList());
     }
 
@@ -112,28 +112,59 @@ public sealed class SpoolsController : ControllerBase
         return CreatedAtAction(nameof(Get), new { id }, spool.ToDto(type));
     }
 
+    [HttpPost("{id}/open")]
+    public Task<ActionResult<SpoolDto>> Open(string id, CancellationToken ct) =>
+        ApplyLifecycle(id, (spool, events) =>
+            SpoolLifecycle.PlanOpen(spool.Id, spool.InitialNetGrams, events), ct);
+
+    [HttpPost("{id}/finish")]
+    public Task<ActionResult<SpoolDto>> Finish(string id, CancellationToken ct) =>
+        ApplyLifecycle(id, (spool, events) =>
+            SpoolLifecycle.PlanFinish(spool.Id, spool.InitialNetGrams, events), ct);
+
     [HttpPost("{id}/consume")]
-    public async Task<ActionResult<SpoolDto>> Consume(string id, [FromBody] ConsumeSpoolDto dto, CancellationToken ct)
-    {
-        var spool = await _spools.GetAsync(id, ct);
-        if (spool is null) return NotFound();
-        var type = await _types.GetAsync(spool.FilamentTypeId, ct);
-        if (type is null) return NotFound();
-        try
-        {
-            var result = SpoolWeightService.Consume(spool, dto.Grams, dto.ProjectName, dto.ProjectUrl, dto.Notes);
-            await _spools.UpdateAsync(result.Spool, result.Event, ct);
-            await _notifier.NotifyAsync("spool", id, ct);
-            return result.Spool.ToDto(type);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentOutOfRangeException)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-    }
+    public Task<ActionResult<SpoolDto>> Consume(string id, [FromBody] ConsumeSpoolDto dto, CancellationToken ct) =>
+        ApplyLifecycle(id, (spool, events) =>
+            SpoolLifecycle.PlanConsume(spool.Id, spool.InitialNetGrams, events,
+                dto.Grams, dto.ProjectName, dto.ProjectUrl, dto.Notes), ct);
 
     [HttpPost("{id}/adjust")]
-    public async Task<ActionResult<SpoolDto>> Adjust(string id, [FromBody] AdjustSpoolDto dto, CancellationToken ct)
+    public Task<ActionResult<SpoolDto>> Adjust(string id, [FromBody] AdjustSpoolDto dto, CancellationToken ct) =>
+        ApplyLifecycle(id, (spool, events) =>
+            SpoolLifecycle.PlanAdjust(spool.Id, spool.InitialNetGrams, events, dto.NewRemainingGrams, dto.Notes), ct);
+
+    [HttpPost("{id}/events/{eventId:long}/disable")]
+    public Task<ActionResult<SpoolDto>> DisableEvent(string id, long eventId, CancellationToken ct) =>
+        ApplyLifecycle(id, (_, events) => SpoolLifecycle.PlanSetEnabled(events, eventId, enabled: false), ct);
+
+    [HttpPost("{id}/events/{eventId:long}/enable")]
+    public Task<ActionResult<SpoolDto>> EnableEvent(string id, long eventId, CancellationToken ct) =>
+        ApplyLifecycle(id, (_, events) => SpoolLifecycle.PlanSetEnabled(events, eventId, enabled: true), ct);
+
+    /// <summary>
+    /// Recomputes every spool's cached state and remaining weight from its enabled events, persists
+    /// any differences and reports them. Used to repair drift after a manual database intervention.
+    /// </summary>
+    [HttpPost("reevaluate")]
+    public async Task<ActionResult<ReevaluateResultDto>> Reevaluate(CancellationToken ct)
+    {
+        var report = await _spools.ReevaluateAllAsync(ct);
+        var changed = report.Where(r => r.Changed)
+            .Select(r => new SpoolReevalDiffDto(
+                r.SpoolId, r.OldStatus.ToString(), r.NewStatus.ToString(),
+                r.OldRemainingGrams, r.NewRemainingGrams))
+            .ToList();
+
+        if (changed.Count > 0)
+            await _notifier.NotifyAsync("spool", null, ct);
+
+        return new ReevaluateResultDto(report.Count, changed.Count, changed);
+    }
+
+    // Shared pipeline for every lifecycle mutation: load the spool + its type + events, build the
+    // (validated) plan, apply it atomically (repository recomputes cached state), broadcast, respond.
+    private async Task<ActionResult<SpoolDto>> ApplyLifecycle(
+        string id, Func<Spool, IReadOnlyList<SpoolEvent>, LifecyclePlan> planner, CancellationToken ct)
     {
         var spool = await _spools.GetAsync(id, ct);
         if (spool is null) return NotFound();
@@ -141,10 +172,12 @@ public sealed class SpoolsController : ControllerBase
         if (type is null) return NotFound();
         try
         {
-            var result = SpoolWeightService.Adjust(spool, dto.NewRemainingGrams, dto.Notes);
-            await _spools.UpdateAsync(result.Spool, result.Event, ct);
+            var events = await _spools.ListEventsAsync(id, ct);
+            var plan = planner(spool, events);
+            var updated = await _spools.ApplyLifecycleAsync(id, plan, ct);
+            if (updated is null) return NotFound();
             await _notifier.NotifyAsync("spool", id, ct);
-            return result.Spool.ToDto(type);
+            return updated.ToDto(type);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentOutOfRangeException)
         {

@@ -60,6 +60,23 @@ button, .btn {
 button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Emphasised call to action, e.g. finishing a nearly-empty spool. */
+button.nudge { background: var(--warn, #c47f00); color: white; border: 0; font-weight: 600; }
+
+/* Inline, text-style button used for per-row undo/redo actions. */
+button.link {
+  background: transparent;
+  color: var(--accent);
+  border: 0;
+  padding: 0.15rem 0.35rem;
+  font: inherit;
+  text-decoration: underline;
+}
+
+/* An undone (disabled) event row: struck through and dimmed. */
+tr.event-disabled td { text-decoration: line-through; opacity: 0.55; }
+tr.event-disabled td button.link { text-decoration: underline; opacity: 1; }
+
 input, select, textarea {
   width: 100%;
   padding: 0.4rem 0.6rem;

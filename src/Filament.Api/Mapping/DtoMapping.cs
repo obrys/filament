@@ -22,8 +22,8 @@ internal static class DtoMapping
             s.CreatedAt, s.OpenedAt, s.FinishedAt, s.Notes);
     }
 
-    public static SpoolEventDto ToDto(this SpoolEvent e, int remainingAfterGrams) => new(
-        e.Id, e.SpoolId, e.Kind.ToString(), e.DeltaGrams, remainingAfterGrams,
+    public static SpoolEventDto ToDto(this SpoolEvent e, int? remainingAfterGrams) => new(
+        e.Id, e.SpoolId, e.Kind.ToString(), e.DeltaGrams, remainingAfterGrams, e.IsDisabled,
         e.ProjectName, e.ProjectUrl, e.Notes, e.OccurredAt);
 
     public static FacetsDto ToDto(this Facets f) => new(

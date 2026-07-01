@@ -41,7 +41,6 @@ public sealed class FilamentDbContext : DbContext
             e.HasIndex(x => x.Status);
             e.HasIndex(x => x.FilamentTypeId);
         });
-
         modelBuilder.Entity<SpoolEventEntity>(e =>
         {
             e.ToTable("spool_events");
@@ -50,6 +49,7 @@ public sealed class FilamentDbContext : DbContext
             e.Property(x => x.ProjectName).HasMaxLength(256);
             e.Property(x => x.ProjectUrl).HasMaxLength(1024);
             e.Property(x => x.Notes).HasMaxLength(1024);
+            e.Property(x => x.IsDisabled).HasDefaultValue(false);
             e.HasOne(x => x.Spool)
              .WithMany(s => s.Events)
              .HasForeignKey(x => x.SpoolId)
