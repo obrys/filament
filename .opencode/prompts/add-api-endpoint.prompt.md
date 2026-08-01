@@ -9,7 +9,7 @@ Before running, fill in:
 - **Resource**: the domain object (e.g. `Spool`)
 - **HTTP method and route**: e.g. `POST /api/spools/{id}/finish`
 
-## Steps Copilot should follow
+## Steps OpenCode should follow
 
 1. **Domain model** (`Filament.Core/Domain/`)  
    Add or extend the domain model if needed. Add any new business-logic method to the relevant
