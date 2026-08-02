@@ -9,7 +9,9 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['html']] : 'list',
   use: {
     baseURL: 'http://localhost:15173',
-    trace: 'on-first-retry',
+    trace: process.env.PLAYWRIGHT_CAPTURE_EVIDENCE === '0' ? 'off' : 'on',
+    screenshot: process.env.PLAYWRIGHT_CAPTURE_EVIDENCE === '0' ? 'off' : 'on',
+    video: process.env.PLAYWRIGHT_CAPTURE_EVIDENCE === '0' ? 'off' : 'on',
   },
   projects: [
     {

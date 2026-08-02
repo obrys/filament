@@ -10,6 +10,14 @@ API_PORT="${E2E_API_PORT:-18080}"
 WEB_PORT="${E2E_WEB_PORT:-15173}"
 READY_TIMEOUT="${E2E_READY_TIMEOUT:-90}"
 
+if [ "${1:-}" = "--no-capture-evidence" ]; then
+  export PLAYWRIGHT_CAPTURE_EVIDENCE=0
+  shift
+elif [ "${1:-}" = "--capture-evidence" ]; then
+  export PLAYWRIGHT_CAPTURE_EVIDENCE=1
+  shift
+fi
+
 # Resolve repo root (parent of scripts/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -135,7 +143,11 @@ fi
 echo "Web is ready."
 
 # --- Run Playwright ----------------------------------------------------------
-echo "Running Playwright tests..."
+if [ "${PLAYWRIGHT_CAPTURE_EVIDENCE:-1}" = "0" ]; then
+  echo "Running Playwright tests without evidence capture..."
+else
+  echo "Running Playwright tests with screenshots, video, and traces..."
+fi
 cd "$REPO_ROOT/e2e"
 TEST_EXIT=0
 npx playwright test "$@" || TEST_EXIT=$?

@@ -138,6 +138,16 @@ npm --prefix e2e run e2e
 
 This invokes `scripts/run-e2e.sh`, which builds the API and web images from the existing Dockerfiles, starts a dedicated `filament-e2e` network with a disposable MariaDB container (no persistent volume), waits for `/healthz`, runs the Chromium Playwright suite, and tears everything down on exit. The runner auto-detects the container CLI: inside a Fedora Silverblue toolbox it uses `flatpak-spawn --host podman`; otherwise it prefers `podman`, falls back to `docker`, and fails clearly if neither is available.
 
+Every run retains Playwright evidence in `e2e/test-results/`: a final screenshot per test, continuous video, and a trace archive. Open a trace with `npx playwright show-trace e2e/test-results/<test>/trace.zip`; the Trace Viewer provides action-by-action snapshots and the action timeline. The video is the best source for continuous visual feedback between actions.
+
+To skip evidence capture for a faster, artifact-free run:
+
+```bash
+npm --prefix e2e run e2e -- --no-capture-evidence
+```
+
+`--capture-evidence` remains accepted as an explicit opt-in alias.
+
 Default host ports are `18080` (API) and `15173` (web), overridable via `E2E_API_PORT` and `E2E_WEB_PORT`. Tests use unique per-run values for seeded data, so the suite is safe to run repeatedly or in parallel without collisions. See the completed [002 Playwright Test Tool](../done/002-playwright-test-tool/) change request for the full design.
 
 ### CI integration

@@ -1,3 +1,4 @@
 node_modules/
+# Playwright screenshots, videos, and trace archives are written here.
 test-results/
 playwright-report/
