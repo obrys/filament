@@ -125,3 +125,36 @@ systemctl --user start filament-db filament-api filament-web
 ```
 
 Keep backups off the server and test restore procedures periodically. A volume archive ties recovery to MariaDB's on-disk format and is less portable than SQL; do not use it as the only backup.
+
+## Functional tests
+
+The repository includes a Playwright-based end-to-end test framework under `e2e/` that exercises the full application stack (database, API, and web) in containers. It is independent of the production deployment and does not require the Quadlet stack.
+
+### Running the e2e suite
+
+```bash
+npm --prefix e2e run e2e
+```
+
+This invokes `scripts/run-e2e.sh`, which builds the API and web images from the existing Dockerfiles, starts a dedicated `filament-e2e` network with a disposable MariaDB container (no persistent volume), waits for `/healthz`, runs the Chromium Playwright suite, and tears everything down on exit. The runner auto-detects the container CLI: inside a Fedora Silverblue toolbox it uses `flatpak-spawn --host podman`; otherwise it prefers `podman`, falls back to `docker`, and fails clearly if neither is available.
+
+Default host ports are `18080` (API) and `15173` (web), overridable via `E2E_API_PORT` and `E2E_WEB_PORT`. Tests use unique per-run values for seeded data, so the suite is safe to run repeatedly or in parallel without collisions. See the completed [002 Playwright Test Tool](../done/002-playwright-test-tool/) change request for the full design.
+
+### CI integration
+
+The `.github/workflows/ci.yml` workflow runs backend unit tests, a frontend build, and an `e2e` job. The `e2e` job is non-blocking (`continue-on-error: true`): a failure does not fail the overall workflow run or block deployment. The deployment pipeline must not depend on e2e results.
+
+### Mid-run database reset
+
+`scripts/e2e-reset-db.sh` drops and recreates the `filament` database in a running e2e stack, restarts the API so EF migrations re-run, and waits for readiness. It is provided for future test scenarios that need a clean database mid-suite; the initial smoke and lifecycle tests do not use it.
+
+### Testing policy
+
+Every implemented change request must be covered by **both** test layers:
+
+1. **Unit tests** (xUnit, `tests/Filament.Core.Tests/` or the relevant `.Tests` project) for changed domain logic, business rules, and pure computations.
+2. **Playwright e2e tests** (`e2e/tests/`) for changed user-visible behavior — any feature reachable through the browser UI. This includes changes to API endpoints that the SPA consumes, spool lifecycle actions, dashboard counts, list views, filtering, and form interactions.
+
+A change request that introduces or modifies user-visible behavior must include at least one Playwright test that exercises the new or changed behavior through the browser. The implementation plan's test matrix must link each user-visible acceptance criterion to a Playwright test. If a change genuinely has no browser-observable behavior (for example, a pure internal refactor or a database migration with no UI impact), the implementation plan must state this explicitly and justify the omission.
+
+Acceptance criteria in the specification should be written so they are verifiable through the browser wherever they describe user-visible behavior, so that Playwright tests can cover them.

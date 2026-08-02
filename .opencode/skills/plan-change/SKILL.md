@@ -27,10 +27,12 @@ Use this skill only for the implementation-planning stage of a spec-driven chang
 
 ## Test layers
 
-- Add unit tests for changed domain or business rules.
-- Add API integration or functional tests for changed API and persistence behavior.
-- Add Playwright tests for changed browser journeys.
-- A change does not automatically need all layers. The plan must justify omissions.
+The project requires **both** test layers for every change that introduces or modifies user-visible behavior:
+
+- **Unit tests** (xUnit, `tests/`): for changed domain logic, business rules, and pure computations.
+- **Playwright e2e tests** (`e2e/tests/`): for changed user-visible behavior — any feature reachable through the browser UI, including API endpoints the SPA consumes, lifecycle actions, dashboard counts, list views, filtering, and forms.
+
+Each user-visible acceptance criterion in the test matrix must link to at least one Playwright test. A change that genuinely has no browser-observable behavior (for example, a pure internal refactor or a database migration with no UI impact) may omit Playwright tests, but the plan must state this explicitly and justify the omission.
 
 ## Plan template
 

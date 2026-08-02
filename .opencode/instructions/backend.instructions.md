@@ -52,11 +52,12 @@ infrastructure types leak into Core.**
 
 ## Testing
 
-- Test project: `tests/Filament.Core.Tests/`.
+- Unit test project: `tests/Filament.Core.Tests/`.
 - Use xUnit. Arrange / Act / Assert comments are optional but welcome.
 - Mock repositories with `Moq` or hand-written fakes; never spin up a real database in unit tests.
 - Test class naming: `<SubjectClass>Tests` (e.g. `SpoolServiceTests`).
 - Test method naming: `<Method>_<Scenario>_<ExpectedOutcome>` (e.g. `Consume_WhenWeightExceedsRemaining_ThrowsException`).
+- **E2e coverage is also required.** Every change with user-visible behavior must have at least one Playwright test in `e2e/tests/` exercising it through the browser. Unit tests cover business logic; Playwright tests cover the browser journey end-to-end. See `doc/spec/operations.md` (Testing policy) for the full policy.
 
 ## General C# style
 

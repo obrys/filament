@@ -15,6 +15,7 @@ flowchart LR
 - `Filament.Infrastructure` contains EF Core entities, database access, repositories, and mappings.
 - `Filament.Api` hosts HTTP endpoints, DTOs, API-to-domain mappings, PDF generation, and real-time communication.
 - `web/` contains the responsive React frontend and nginx runtime configuration.
+- `e2e/` contains the Playwright functional test suite (Node + TypeScript) and its own `package.json`; it is independent of the SPA build and runs against the containerized application stack. See [Operations](operations.md) for how to run it.
 
 Business logic should remain independent of EF Core and HTTP where practical so it can be unit-tested. API calls use DTOs and explicit mapping between DTOs, domain models, and persistence entities.
 

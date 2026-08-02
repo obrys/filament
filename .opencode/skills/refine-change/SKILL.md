@@ -39,6 +39,7 @@ Use this skill only for the specification-refinement stage of a spec-driven chan
 - State the expected outcome, not an implementation detail, unless the implementation detail is an explicit constraint.
 - Use precise conditions, inputs, outputs, errors, or visible UI outcomes.
 - Do not use subjective criteria such as "easy to use" as a completion test. Keep them as product context and add measurable criteria where possible.
+- Write criteria describing user-visible behavior so they are verifiable through the browser (page navigation, element visibility, text content, form interactions). This ensures the Playwright e2e test layer can cover them, as required by the project's testing policy (see `doc/spec/operations.md`).
 
 ## Specification template
 

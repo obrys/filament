@@ -36,6 +36,8 @@ The basic idea is that the application manages a filament storage.
 
 Try to externalize the business logic if possible. Always use unit tests for business logic. Always use DTOs for API calls, the DTOs should be mapped to domain model objects, for the call the database, always use mapping to entities and then back from entities to domain model. Try to keep this three-layer architecture.
 
+**Testing policy:** Every implemented change must be covered by both unit tests (xUnit, `tests/`) and Playwright e2e tests (`e2e/tests/`). Unit tests cover business logic; Playwright tests cover user-visible behavior through the browser. A change with no browser-observable behavior may omit Playwright tests but must justify the omission in the implementation plan. See `doc/spec/operations.md` for details.
+
 ## Tech Stack front-end
 
 - React-based front end
@@ -58,6 +60,8 @@ Try to externalize the business logic if possible. Always use unit tests for bus
 src/          # Back-end production projects  (<ProjectName>/<ProjectName>.csproj)
 tests/        # Back-end test projects        (<ProjectName>.Tests/<ProjectName>.Tests.csproj)
 web/          # React front-end application
+e2e/          # Playwright functional test suite (Node + TypeScript, own package.json)
+scripts/      # E2e runner and helper scripts (run-e2e.sh, e2e-reset-db.sh)
 deploy/       # Deployment artifacts (docker-compose, env templates, etc.)
 ```
 
@@ -69,6 +73,7 @@ deploy/       # Deployment artifacts (docker-compose, env templates, etc.)
 | `Filament.Api` | ASP.NET HTTP host: controllers, DTOs, mapping, PDF generation, WebSocket hub |
 | `Filament.Infrastructure` | EF Core entities, migrations, repository implementations, DI registration |
 | `Filament.Core.Tests` | Unit tests for `Filament.Core` business logic |
+| `e2e/` | Playwright functional tests (Node + TypeScript); runs the full stack in containers |
 
 ### AI artifacts
 

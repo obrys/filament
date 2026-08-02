@@ -20,7 +20,7 @@ Use this skill only for the implementation stage of a spec-driven change request
 
 1. Check the current branch and worktree. Report unrelated changes but continue when they do not conflict.
 2. Implement the approved scope in small, coherent changes.
-3. Add or update every test in the approved test matrix. Use unit tests for business logic, API functional/integration tests for API behavior, and Playwright tests for changed browser journeys when applicable.
+3. Add or update every test in the approved test matrix. The project requires **both** test layers for changes with user-visible behavior: unit tests (xUnit, `tests/`) for business logic, and Playwright e2e tests (`e2e/tests/`) for any feature reachable through the browser UI. If the approved plan justified omitting Playwright tests because the change has no browser-observable behavior, honor that justification; otherwise both layers are mandatory.
 4. Run the exact planned test commands and any directly relevant build or lint commands.
 5. Fix failures caused by this change. If blocked by a decision, environment, or unrelated failure, stop and describe the blocker precisely.
 6. Create or update `implementation-notes.md` containing:

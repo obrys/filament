@@ -1,0 +1,16 @@
+{
+  "name": "filament-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "bash ../scripts/run-e2e.sh",
+    "test": "playwright test",
+    "report": "playwright show-report",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@types/node": "^22.7.0",
+    "typescript": "^5.6.2"
+  }
+}
