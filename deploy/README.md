@@ -172,7 +172,7 @@ From your Kinoite desktop, in the repo root:
 rsync -av --delete deploy/quadlets/ filament@<vm-ip>:~/.config/containers/systemd/
 
 # 2) Build and ship the images
-./deploy/scripts/deploy.sh filament@<vm-ip>
+./deploy/scripts/deploy.sh filament@<vm-ip> amd64
 ```
 
 On the **server** (one-time):
@@ -207,8 +207,13 @@ Open in a browser: `http://<vm-ip>/`
 ### Ship an update from desktop
 
 ```bash
-./deploy/scripts/deploy.sh filament@<vm-ip>
+./deploy/scripts/deploy.sh filament@<vm-ip> amd64
 ```
+
+The second argument is the server architecture: use `amd64` for x86_64 FCOS
+and `arm64` for an ARM64 host such as a Raspberry Pi 5. The local container
+engine must be able to build the selected platform; cross-architecture builds
+may require binfmt/QEMU emulation.
 
 The script:
 1. Builds `filament-api` and `filament-web` locally

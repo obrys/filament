@@ -2,15 +2,24 @@
 # Build the API + web images locally, ship them to the FCOS server via SSH,
 # sync Quadlet units, and restart affected services.
 #
-# Usage:   ./deploy/scripts/deploy.sh user@host
-# Example: ./deploy/scripts/deploy.sh filament@192.168.1.50
+# Usage:   ./deploy/scripts/deploy.sh user@host arm64|amd64
+# Example: ./deploy/scripts/deploy.sh filament@192.168.1.50 arm64
 set -euo pipefail
 
-if [[ $# -ne 1 ]]; then
-    echo "Usage: $0 user@host" >&2
+if [[ $# -ne 2 ]]; then
+    echo "Usage: $0 user@host arm64|amd64" >&2
     exit 64
 fi
 TARGET="$1"
+ARCH="$2"
+case "$ARCH" in
+    amd64|arm64) ;;
+    *)
+        echo "Unsupported target architecture: $ARCH (expected arm64 or amd64)." >&2
+        exit 64
+        ;;
+esac
+PLATFORM="linux/$ARCH"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 
@@ -21,6 +30,7 @@ if [[ -z "$ENGINE" ]]; then
     exit 1
 fi
 echo "==> Using container engine: $ENGINE"
+echo "==> Target platform: $PLATFORM"
 
 API_TAG="localhost/filament-api:latest"
 WEB_TAG="localhost/filament-web:latest"
@@ -41,10 +51,10 @@ unset _base_commit _dirty_hash
 echo "==> Build version: $GIT_COMMIT"
 
 echo "==> Building API image"
-"$ENGINE" build --build-arg "GIT_COMMIT=$GIT_COMMIT" -t "$API_TAG" -f src/Filament.Api/Dockerfile .
+"$ENGINE" build --platform "$PLATFORM" --build-arg "GIT_COMMIT=$GIT_COMMIT" -t "$API_TAG" -f src/Filament.Api/Dockerfile .
 
 echo "==> Building Web image"
-"$ENGINE" build --build-arg "GIT_COMMIT=$GIT_COMMIT" -t "$WEB_TAG" -f web/Dockerfile web
+"$ENGINE" build --platform "$PLATFORM" --build-arg "GIT_COMMIT=$GIT_COMMIT" -t "$WEB_TAG" -f web/Dockerfile web
 
 echo "==> Streaming API image to $TARGET"
 "$ENGINE" save "$API_TAG" | ssh "$TARGET" "podman load"

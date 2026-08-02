@@ -23,15 +23,15 @@ The checked-in Quadlets currently contain the MariaDB application password and A
 
 ## First installation
 
-Run these from a workstation clone, substituting the SSH destination:
+Run these from a workstation clone, substituting the SSH destination and target architecture:
 
 ```bash
 rsync -av --delete deploy/quadlets/ \
   filament@SERVER:~/.config/containers/systemd/
-./deploy/scripts/deploy.sh filament@SERVER
+./deploy/scripts/deploy.sh filament@SERVER amd64
 ```
 
-The deploy script chooses Podman when available (otherwise Docker) to build `localhost/filament-api:latest` and `localhost/filament-web:latest`, transfers both images through SSH, synchronizes Quadlets, reloads the remote user manager, waits for MariaDB health, restarts API and web, and polls `http://localhost:8080/healthz` on the server for up to about 60 seconds.
+`deploy/scripts/deploy.sh` requires exactly two arguments: SSH target and `amd64` or `arm64`. It passes the selected `linux/<architecture>` platform to both image builds, so use `arm64` for a Raspberry Pi 5 and `amd64` for the existing x86_64 deployment. The local container engine must support building the selected platform; cross-architecture builds may require registered binfmt/QEMU emulation. The script chooses Podman when available (otherwise Docker) to build `localhost/filament-api:latest` and `localhost/filament-web:latest`, transfers both images through SSH, synchronizes Quadlets, reloads the remote user manager, waits for MariaDB health, restarts API and web, and polls `http://localhost:8080/healthz` on the server for up to about 60 seconds.
 
 For a manual first start, connect as the deployment user and run:
 
@@ -49,7 +49,7 @@ Open `http://SERVER:8081/` for the web UI. Port 8080 exposes the API directly. A
 
 ```bash
 # Deploy a new version from the workstation
-./deploy/scripts/deploy.sh filament@SERVER
+./deploy/scripts/deploy.sh filament@SERVER amd64
 
 # Follow logs on the server
 journalctl --user -u filament-api.service -f
