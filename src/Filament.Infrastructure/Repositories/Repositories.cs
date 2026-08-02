@@ -67,19 +67,39 @@ public sealed class SpoolRepository : ISpoolRepository
         return e?.ToDomain();
     }
 
-    public async Task<IReadOnlyList<Spool>> ListAsync(string? filamentTypeId = null, bool includeFinished = false, CancellationToken ct = default)
+    public async Task<IReadOnlyList<Spool>> ListAsync(SpoolSort sort = SpoolSort.LastUsed, string? filamentTypeId = null, bool includeFinished = false, CancellationToken ct = default)
     {
         var q = _db.Spools.AsNoTracking().AsQueryable();
         if (filamentTypeId is not null) q = q.Where(s => s.FilamentTypeId == filamentTypeId);
         if (!includeFinished) q = q.Where(s => s.Status != (int)SpoolStatus.Finished);
-        var entities = await q.OrderByDescending(s => s.CreatedAt).ToListAsync(ct);
+
+        // Sorting is performed by the database in the listing query, not in application memory.
+        // The fixed secondary order (lastUsedAt desc, then id asc) keeps results stable across
+        // equal primary keys. ThenByDescending(LastUsedAt) is redundant under the LastUsed primary
+        // but harmless and keeps one code path for the mandated secondary order.
+        IOrderedQueryable<SpoolEntity> ordered = sort switch
+        {
+            SpoolSort.LeastRemaining => q.OrderBy(s => s.RemainingGrams),
+            SpoolSort.MostRemaining => q.OrderByDescending(s => s.RemainingGrams),
+            _ => q.OrderByDescending(s => s.LastUsedAt),
+        };
+        var entities = await ordered
+            .ThenByDescending(s => s.LastUsedAt)
+            .ThenBy(s => s.Id)
+            .ToListAsync(ct);
         return entities.Select(EntityMapping.ToDomain).ToList();
     }
 
     public async Task AddAsync(Spool spool, SpoolEvent createdEvent, CancellationToken ct = default)
     {
-        _db.Spools.Add(spool.ToEntity());
+        var entity = spool.ToEntity();
+        _db.Spools.Add(entity);
         _db.SpoolEvents.Add(createdEvent.ToEntity());
+        // Derive the cached state (including LastUsedAt) at creation so a fresh spool is immediately
+        // consistent with the cache-writer path used by lifecycle writes and re-evaluation. A
+        // Created-only spool ends up with LastUsedAt == the Created event's OccurredAt.
+        var state = SpoolLifecycle.Evaluate(spool.InitialNetGrams, new[] { createdEvent });
+        ApplyState(entity, state);
         await _db.SaveChangesAsync(ct);
     }
 
@@ -175,6 +195,7 @@ public sealed class SpoolRepository : ISpoolRepository
         spool.RemainingGrams = state.RemainingGrams;
         spool.OpenedAt = state.OpenedAt;
         spool.FinishedAt = state.FinishedAt;
+        spool.LastUsedAt = state.LastUsedAt;
     }
 }
 

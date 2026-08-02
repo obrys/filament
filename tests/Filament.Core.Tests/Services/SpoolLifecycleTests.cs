@@ -382,6 +382,51 @@ public class SpoolLifecycleTests
         Assert.Null(state.FinishedAt);
     }
 
+    // ---------------- LastUsedAt (AC-9, AC-10, AC-11) ----------------
+
+    [Fact]
+    public void Evaluate_SetsLastUsedAtToMostRecentEnabledEvent()
+    {
+        var state = SpoolLifecycle.Evaluate(Initial, new[]
+        {
+            Ev(1, SpoolEventKind.Created, hours: 0),
+            Ev(2, SpoolEventKind.Opened, hours: 1),
+            Ev(3, SpoolEventKind.Print, -50, hours: 2),
+        });
+        Assert.Equal(T0.AddHours(2), state.LastUsedAt);
+    }
+
+    [Fact]
+    public void Evaluate_CreatedOnly_SetsLastUsedAtToCreatedEventOccurredAt()
+    {
+        var state = SpoolLifecycle.Evaluate(Initial, new[] { Ev(1, SpoolEventKind.Created, hours: 3) });
+        Assert.Equal(T0.AddHours(3), state.LastUsedAt);
+    }
+
+    [Fact]
+    public void Evaluate_DisabledEvents_AreIgnoredForLastUsedAt()
+    {
+        // The most recent enabled event is the Open at h=1; the disabled Print at h=2 is ignored.
+        var state = SpoolLifecycle.Evaluate(Initial, new[]
+        {
+            Ev(1, SpoolEventKind.Created, hours: 0),
+            Ev(2, SpoolEventKind.Opened, hours: 1),
+            Ev(3, SpoolEventKind.Print, -50, hours: 2, disabled: true),
+        });
+        Assert.Equal(T0.AddHours(1), state.LastUsedAt);
+    }
+
+    [Fact]
+    public void Evaluate_SameInstantOpenAndPrint_LastUsedAtIsThatInstant()
+    {
+        var state = SpoolLifecycle.Evaluate(Initial, new[]
+        {
+            Ev(5, SpoolEventKind.Print, -50, hours: 1),
+            Ev(6, SpoolEventKind.Opened, hours: 1),
+        });
+        Assert.Equal(T0.AddHours(1), state.LastUsedAt);
+    }
+
     // ---------------- RunningRemaining ----------------
 
     [Fact]

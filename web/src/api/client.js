@@ -1,6 +1,10 @@
 import { observeVersion } from '../version';
 /** The four shared facet fields, in display order. */
 export const FACET_FIELDS = ['brand', 'material', 'type', 'color'];
+/** Type guard for the `sort` URL/query value. Anything else resolves to the default. */
+export function isSpoolSort(v) {
+    return v === 'lastUsed' || v === 'leastRemaining' || v === 'mostRemaining';
+}
 async function http(url, init) {
     const r = await fetch(url, {
         ...init,
@@ -49,6 +53,8 @@ export const api = {
                 p.set('filamentTypeId', opts.filamentTypeId);
             if (opts?.includeFinished)
                 p.set('includeFinished', 'true');
+            if (opts?.sort)
+                p.set('sort', opts.sort);
             appendFacets(p, opts?.filters);
             const qs = p.toString();
             return http(`/api/spools${qs ? `?${qs}` : ''}`);

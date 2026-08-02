@@ -16,7 +16,7 @@ public interface IFilamentTypeRepository
 public interface ISpoolRepository
 {
     Task<Spool?> GetAsync(string id, CancellationToken ct = default);
-    Task<IReadOnlyList<Spool>> ListAsync(string? filamentTypeId = null, bool includeFinished = false, CancellationToken ct = default);
+    Task<IReadOnlyList<Spool>> ListAsync(SpoolSort sort = SpoolSort.LastUsed, string? filamentTypeId = null, bool includeFinished = false, CancellationToken ct = default);
     Task AddAsync(Spool spool, SpoolEvent createdEvent, CancellationToken ct = default);
     Task UpdateAsync(Spool spool, SpoolEvent? newEvent = null, CancellationToken ct = default);
     Task<bool> DeleteAsync(string id, CancellationToken ct = default);

@@ -23,7 +23,7 @@ Business logic should remain independent of EF Core and HTTP where practical so 
 
 MariaDB owns the persistent `filament_types`, `spools`, and `spool_events` tables. The type-to-spool relationship is restrictive, while deleting a spool cascades only to its events. Repository lifecycle writes load one spool and its events, apply one validated plan, recompute derived state, and save the changed event and cache together.
 
-The authoritative material ledger is the enabled event history. `spools.remaining_grams`, status, opened time, and finished time are denormalized caches for efficient listing and dashboard queries. The maintenance endpoint recomputes them from history if direct database work caused drift.
+The authoritative material ledger is the enabled event history. `spools.remaining_grams`, status, opened time, finished time, and `lastUsedAt` are denormalized caches for efficient listing and dashboard queries (including the server-side sort of the spool list). The maintenance endpoint recomputes them from history if direct database work caused drift.
 
 At API startup, EF Core migrations run automatically. The API retries migration/connection failures ten times at three-second intervals, then fails so systemd can restart the container rather than serving an unmigrated database.
 

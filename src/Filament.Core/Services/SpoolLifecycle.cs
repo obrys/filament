@@ -17,7 +17,8 @@ public sealed record SpoolState(
     SpoolStatus Status,
     int RemainingGrams,
     DateTimeOffset? OpenedAt,
-    DateTimeOffset? FinishedAt);
+    DateTimeOffset? FinishedAt,
+    DateTimeOffset LastUsedAt);
 
 /// <summary>
 /// The spool state machine. State is derived exclusively from the <b>enabled</b> events; weight is
@@ -62,9 +63,15 @@ public static class SpoolLifecycle
         DateTimeOffset? openedAt = null;
         DateTimeOffset? finishedAt = null;
         var remaining = initialNetGrams;
+        // The most recent enabled event's OccurredAt, in the canonical chronological order applied
+        // by OrderedEnabled below. Because every spool has an immutable enabled Created event, the
+        // loop always yields at least one event, so this ends non-null — a Created-only spool reports
+        // its Created event's OccurredAt as lastUsedAt.
+        DateTimeOffset? lastUsedAt = null;
 
         foreach (var e in OrderedEnabled(events))
         {
+            lastUsedAt = e.OccurredAt;
             remaining += e.DeltaGrams;
             switch (e.Kind)
             {
@@ -97,7 +104,7 @@ public static class SpoolLifecycle
         if (status != SpoolStatus.Finished) finishedAt = null;
         if (status == SpoolStatus.Sealed) openedAt = null;
 
-        return new SpoolState(status, remaining, openedAt, finishedAt);
+        return new SpoolState(status, remaining, openedAt, finishedAt, lastUsedAt ?? DateTimeOffset.UtcNow);
     }
 
     /// <summary>

@@ -8,7 +8,7 @@ The SPA has these browser routes:
 |---|---|
 | `/` | Dashboard counts and the last 30 days of consumption. |
 | `/types` | Filament-type list, facets, creation, and deletion. |
-| `/spools` | Spool list, facets, finished toggle, creation, label selection, and link to repair. |
+| `/spools` | Spool list, facets, finished toggle, sort selector, creation, label selection, and link to repair. |
 | `/spools/:id` | Spool details, current weights/status, lifecycle actions, and event history. |
 | `/spools/maintenance` | Re-evaluate all cached spool states. |
 
@@ -23,7 +23,7 @@ The API uses JSON and serializes enum values as strings. Successful mutations no
 | `GET /api/filament-types` | List types and facets. Repeat `brand`, `material`, `type`, and `color` query keys to filter. |
 | `GET/PUT/DELETE /api/filament-types/{id}` | Read, replace, or delete a type. Deletion fails if any spool references it. |
 | `POST /api/filament-types` | Create a type; the server assigns its ID. |
-| `GET /api/spools` | List spools and facets. Supports `filamentTypeId`, `includeFinished`, and the shared facet keys. |
+| `GET /api/spools` | List spools and facets. Supports `filamentTypeId`, `includeFinished`, `sort`, and the shared facet keys. |
 | `GET /api/spools/{id}` | Read a spool, including effective empty-spool and total weights. |
 | `POST /api/spools` | Create a sealed spool and its immutable creation event. |
 | `DELETE /api/spools/{id}` | Delete a spool and its event history. |
@@ -42,6 +42,20 @@ The API uses JSON and serializes enum values as strings. Successful mutations no
 | `GET /api/version` | Running backend build version; returns `503` while graceful shutdown is in progress. |
 
 Creation and update payload fields correspond to the domain model. The server currently relies on domain workflow checks rather than a broad request-validation layer; callers should provide valid strings and sensible, non-negative weight values.
+
+### Spool list sorting
+
+`GET /api/spools` accepts a `sort` query parameter that selects the server-side ordering of the spool list (sorting is performed by MariaDB in the listing query, not in the client). Recognized values are case-sensitive:
+
+| Value | Meaning |
+|---|---|
+| `lastUsed` | Most recent `lastUsedAt` first (descending). The default when `sort` is missing, empty, or unrecognized. |
+| `leastRemaining` | Smallest `remaining_grams` first (ascending). |
+| `mostRemaining` | Largest `remaining_grams` first (descending). |
+
+An unknown `sort` value resolves to `lastUsed` and does not produce a `400`. After the chosen sort key, a fixed secondary order keeps results stable: `lastUsedAt` descending, then spool `id` ascending. Sorting applies after facet filtering and is independent of `includeFinished` and the facet counts. See the completed [001-sorting](../done/001-sorting/) change request for the full rationale.
+
+Each `SpoolDto` returned by `GET /api/spools` and `GET /api/spools/{id}` includes a `lastUsedAt` timestamp: the `occurredAt` of the most recent enabled event on the spool, which for a spool with only the immutable `Created` event equals that event's `occurredAt` (the spool's `CreatedAt`). The SPA `/spools` page exposes the active sort through a selector bound to the URL (`/spools?sort=<key>`); a missing or unknown URL value resolves to `lastUsed` and the address bar is normalized to the resolved value. The selector does not reorder rows client-side.
 
 ## Printable labels
 

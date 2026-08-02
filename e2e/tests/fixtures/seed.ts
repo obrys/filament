@@ -2,7 +2,7 @@ import { test as base, expect } from '@playwright/test'
 import { unique } from './ids'
 
 export type Seed = {
-  type: { brand: string; material: string; type: string; color: string }
+  type: { id: string; brand: string; material: string; type: string; color: string }
   spool: { id: string }
 }
 
@@ -34,7 +34,7 @@ export const test = base.extend<{ seed: Seed }>({
     const spoolId = await page.locator('tbody tr td a.id-pill').first().innerText()
     expect(spoolId).toMatch(/^[0-9A-HJ-NP-TV-Z]{4}$/)
 
-    await use({ type: { brand, material, type: productType, color }, spool: { id: spoolId } })
+    await use({ type: { id: typeId, brand, material, type: productType, color }, spool: { id: spoolId } })
   },
 })
 

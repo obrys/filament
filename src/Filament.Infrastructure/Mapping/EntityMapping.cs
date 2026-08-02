@@ -56,6 +56,7 @@ internal static class EntityMapping
         CreatedAt = e.CreatedAt,
         OpenedAt = e.OpenedAt,
         FinishedAt = e.FinishedAt,
+        LastUsedAt = e.LastUsedAt,
         Notes = e.Notes,
     };
 
@@ -70,6 +71,7 @@ internal static class EntityMapping
         CreatedAt = d.CreatedAt,
         OpenedAt = d.OpenedAt,
         FinishedAt = d.FinishedAt,
+        LastUsedAt = d.LastUsedAt,
         Notes = d.Notes,
     };
 
@@ -82,6 +84,7 @@ internal static class EntityMapping
         e.RemainingGrams = d.RemainingGrams;
         e.OpenedAt = d.OpenedAt;
         e.FinishedAt = d.FinishedAt;
+        e.LastUsedAt = d.LastUsedAt;
         e.Notes = d.Notes;
     }
 

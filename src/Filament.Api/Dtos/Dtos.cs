@@ -44,6 +44,7 @@ public sealed record SpoolDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? OpenedAt,
     DateTimeOffset? FinishedAt,
+    DateTimeOffset? LastUsedAt,
     string? Notes);
 
 public sealed record CreateSpoolDto(

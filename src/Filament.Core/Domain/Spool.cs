@@ -38,5 +38,16 @@ public sealed class Spool
     public DateTimeOffset? OpenedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
 
+    /// <summary>
+    /// Cached <c>lastUsedAt</c> timestamp: the <c>OccurredAt</c> of the most recent enabled spool
+    /// event, derived in <see cref="Services.SpoolLifecycle.Evaluate"/> and persisted for cheap
+    /// sorted reads. Like <see cref="RemainingGrams"/>, <see cref="OpenedAt"/> and
+    /// <see cref="FinishedAt"/> it is recomputed on every event change (and by the manual
+    /// re-evaluation tool), so treat it as authoritative-but-recoverable. In practice always
+    /// populated after an Evaluate (every spool has an immutable enabled Created event); nullable
+    /// here only to mirror the other cached timestamps.
+    /// </summary>
+    public DateTimeOffset? LastUsedAt { get; set; }
+
     public string? Notes { get; set; }
 }

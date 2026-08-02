@@ -19,7 +19,7 @@ internal static class DtoMapping
             s.EmptySpoolWeightGramsOverride, empty,
             s.RemainingGrams + empty,
             s.Status.ToString(),
-            s.CreatedAt, s.OpenedAt, s.FinishedAt, s.Notes);
+            s.CreatedAt, s.OpenedAt, s.FinishedAt, s.LastUsedAt, s.Notes);
     }
 
     public static SpoolEventDto ToDto(this SpoolEvent e, int? remainingAfterGrams) => new(

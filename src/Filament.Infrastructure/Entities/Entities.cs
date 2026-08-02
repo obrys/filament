@@ -33,6 +33,9 @@ internal sealed class SpoolEntity
     public DateTimeOffset? OpenedAt { get; set; }
     public DateTimeOffset? FinishedAt { get; set; }
 
+    /// <summary>Cached lastUsedAt, recomputed from enabled events on every change. Sort key for the spool list.</summary>
+    public DateTimeOffset? LastUsedAt { get; set; }
+
     public string? Notes { get; set; }
 
     public List<SpoolEventEntity> Events { get; set; } = new();

@@ -25,6 +25,7 @@ export type Spool = {
   createdAt: string
   openedAt?: string | null
   finishedAt?: string | null
+  lastUsedAt?: string | null
   notes?: string | null
 }
 
@@ -80,6 +81,14 @@ export type FacetSelection = Record<FacetField, string[]>
 export type FilamentTypeList = { items: FilamentType[]; facets: Facets }
 export type SpoolList = { items: Spool[]; facets: Facets }
 
+/** Sort keys accepted by GET /api/spools. Direction is implied by the key. */
+export type SpoolSort = 'lastUsed' | 'leastRemaining' | 'mostRemaining'
+
+/** Type guard for the `sort` URL/query value. Anything else resolves to the default. */
+export function isSpoolSort(v: string | null | undefined): v is SpoolSort {
+  return v === 'lastUsed' || v === 'leastRemaining' || v === 'mostRemaining'
+}
+
 async function http<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, {
     ...init,
@@ -118,10 +127,11 @@ export const api = {
     delete: (id: string) => http<void>(`/api/filament-types/${id}`, { method: 'DELETE' }),
   },
   spools: {
-    list: (opts?: { filamentTypeId?: string; includeFinished?: boolean; filters?: Partial<FacetSelection> }) => {
+    list: (opts?: { filamentTypeId?: string; includeFinished?: boolean; sort?: SpoolSort; filters?: Partial<FacetSelection> }) => {
       const p = new URLSearchParams()
       if (opts?.filamentTypeId) p.set('filamentTypeId', opts.filamentTypeId)
       if (opts?.includeFinished) p.set('includeFinished', 'true')
+      if (opts?.sort) p.set('sort', opts.sort)
       appendFacets(p, opts?.filters)
       const qs = p.toString()
       return http<SpoolList>(`/api/spools${qs ? `?${qs}` : ''}`)

@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { api, type Spool, type FilamentType, type Facets } from '../api/client'
+import { Link, useSearchParams } from 'react-router-dom'
+import { api, type Spool, type FilamentType, type Facets, type SpoolSort, isSpoolSort } from '../api/client'
 import { onChange } from '../realtime/useChangeStream'
 import { FilterBar } from '../components/FilterBar'
 import { useFacetFilters } from '../hooks/useFacetFilters'
 
 const EMPTY_FACETS: Facets = { brand: [], material: [], type: [], color: [] }
 
+const SORT_OPTIONS: { value: SpoolSort; label: string }[] = [
+  { value: 'lastUsed', label: 'Last used' },
+  { value: 'leastRemaining', label: 'Least remaining' },
+  { value: 'mostRemaining', label: 'Most remaining' },
+]
+
 export function Spools() {
+  const [params, setParams] = useSearchParams()
+  const rawSort = params.get('sort')
+  const sort: SpoolSort = isSpoolSort(rawSort) ? rawSort : 'lastUsed'
+
   const [spools, setSpools] = useState<Spool[]>([])
   const [facets, setFacets] = useState<Facets>(EMPTY_FACETS)
   const [types, setTypes] = useState<Record<string, FilamentType>>({})
@@ -17,7 +27,7 @@ export function Spools() {
   const { selection, toggleOption, removeOption, clearAll } = useFacetFilters()
 
   const load = () => {
-    api.spools.list({ includeFinished, filters: selection })
+    api.spools.list({ sort, includeFinished, filters: selection })
       .then(r => { setSpools(r.items); setFacets(r.facets) })
       .catch(console.error)
     // The type map must cover every spool regardless of the active filter, so load all types.
@@ -27,7 +37,25 @@ export function Spools() {
     load()
     return onChange(m => { if (m.resource === 'spool' || m.resource === 'filament-type') load() })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [includeFinished, JSON.stringify(selection)])
+  }, [sort, includeFinished, JSON.stringify(selection)])
+
+  // Normalize the URL to the resolved sort when the value was missing or unrecognized, so the
+  // address bar reflects what is displayed. Setting the same value keeps the URL stable otherwise.
+  useEffect(() => {
+    if (rawSort !== sort) {
+      const next = new URLSearchParams(params)
+      next.set('sort', sort)
+      setParams(next, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sort])
+
+  const onSortChange = (value: string) => {
+    if (!isSpoolSort(value)) return
+    const next = new URLSearchParams(params)
+    next.set('sort', value)
+    setParams(next)
+  }
 
   const toggle = (id: string) => {
     const next = new Set(selected)
@@ -43,6 +71,12 @@ export function Spools() {
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', margin: 0, width: 'auto' }}>
           <input type="checkbox" style={{ width: 'auto' }} checked={includeFinished}
             onChange={e => setIncludeFinished(e.target.checked)} /> Show finished
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', margin: 0, width: 'auto' }}>
+          Sort
+          <select aria-label="Sort" value={sort} onChange={e => onSortChange(e.target.value)}>
+            {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
         </label>
         <button disabled={selected.size === 0}
           onClick={() => window.open(api.spools.labelPdfUrl([...selected]), '_blank')}>

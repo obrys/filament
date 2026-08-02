@@ -79,6 +79,8 @@ stateDiagram-v2
 
 For legacy resilience, evaluation treats an enabled print or adjustment encountered while sealed as opening the spool at that event's timestamp. Normal application actions do not rely on this behavior: users must open the spool first.
 
+The most recent enabled event's `occurredAt` (in the chronological order above) is exposed as the spool's `lastUsedAt`. Because every spool has an immutable enabled `Created` event, `lastUsedAt` is never null: a spool with no other events reports its `CreatedAt`. Disabling the most recent event moves `lastUsedAt` to the now-most-recent enabled event; re-enabling it moves `lastUsedAt` back.
+
 Undo and redo toggle `isDisabled`; they never erase an event. A disabled event remains visible in history, is displayed as undone, has no running balance, and contributes neither weight nor state. Redoing a print, adjustment, or finish requires at least one enabled `Opened` event. Undoing an opening is rejected until every active print, adjustment, and finish event has been undone. Open and finish reuse the most recent matching undone marker where possible.
 
 The UI gives Finish visual emphasis at or below 5% of the initial net weight, but this is a presentation cue only.
@@ -91,7 +93,8 @@ The UI gives Finish visual emphasis at or below 5% of the initial net weight, bu
 - Types and spools support the same facets: brand, material, product type, and colour. Values selected within one facet are ORed; selections across facets are ANDed.
 - Facet counts ignore their own facet's selection while applying all other selections. All values in the unfiltered universe are shown, including zero-count options, ordered by count descending then lexical value ascending.
 - A spool inherits its facet attributes from its filament type. An unresolved type is omitted from a spool-list facet universe.
+- The spool list is sorted server-side by a `sort` query parameter on `GET /api/spools` with values `lastUsed` (default), `leastRemaining`, or `mostRemaining`; missing or unknown values resolve to `lastUsed` without error. After the chosen key a fixed secondary order (`lastUsedAt` descending, then `id` ascending) keeps results stable. Sorting applies after facet filtering and does not change facet counts; finished spools, when included, sort by the same rules as active spools. See [Interfaces](interfaces.md#spool-list-sorting) and the completed [001-sorting](../done/001-sorting/) change request.
 
 ## Derived-cache repair
 
-`POST /api/spools/reevaluate` evaluates every spool from enabled events and saves only differences in status, remaining grams, opened timestamp, and finished timestamp. It is safe to run and is the supported repair operation after direct database work. It returns each corrected spool's old and new status and balance.
+`POST /api/spools/reevaluate` evaluates every spool from enabled events and saves only differences in status, remaining grams, opened timestamp, finished timestamp, and `lastUsedAt`. It is safe to run and is the supported repair operation after direct database work. It returns each corrected spool's old and new status and balance.

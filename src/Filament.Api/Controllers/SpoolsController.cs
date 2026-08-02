@@ -26,6 +26,7 @@ public sealed class SpoolsController : ControllerBase
 
     [HttpGet]
     public async Task<SpoolListDto> List(
+        [FromQuery] string? sort,
         [FromQuery] string? filamentTypeId,
         [FromQuery] bool includeFinished,
         [FromQuery] string[]? brand,
@@ -34,7 +35,8 @@ public sealed class SpoolsController : ControllerBase
         [FromQuery] string[]? color,
         CancellationToken ct)
     {
-        var items = await _spools.ListAsync(filamentTypeId, includeFinished, ct);
+        var sortKey = SpoolSortParser.Parse(sort);
+        var items = await _spools.ListAsync(sortKey, filamentTypeId, includeFinished, ct);
         // Batch load types referenced by the spool list.
         var typeIds = items.Select(s => s.FilamentTypeId).Distinct().ToList();
         var types = new Dictionary<string, FilamentType>();
