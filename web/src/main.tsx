@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link } from 'react-router'
 import { Dashboard } from './pages/Dashboard'
 import { FilamentTypes } from './pages/FilamentTypes'
 import { Spools } from './pages/Spools'

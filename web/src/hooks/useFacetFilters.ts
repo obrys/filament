@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router'
 import { FACET_FIELDS, type FacetField, type FacetSelection } from '../api/client'
 
 const EMPTY: FacetSelection = { brand: [], material: [], type: [], color: [] }

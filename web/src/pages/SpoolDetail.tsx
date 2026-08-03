@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link } from 'react-router'
 import { api, type Spool, type SpoolEvent, type FilamentType } from '../api/client'
 import { onChange } from '../realtime/useChangeStream'
 

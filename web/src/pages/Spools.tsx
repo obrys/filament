@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router'
 import { api, type Spool, type FilamentType, type Facets, type SpoolSort, isSpoolSort } from '../api/client'
 import { onChange } from '../realtime/useChangeStream'
 import { FilterBar } from '../components/FilterBar'
