@@ -127,7 +127,7 @@ done
 echo "==> Waiting for API to report healthy"
 healthy=0
 for i in {1..30}; do
-    if curl -fsS --max-time 3 http://localhost:8080/healthz >/dev/null 2>&1; then
+    if curl -fsS --max-time 3 http://localhost:18080/healthz >/dev/null 2>&1; then
         healthy=1
         break
     fi
@@ -149,4 +149,4 @@ REMOTE
 
 echo "==> Deployment complete."
 echo "    Web UI:  http://${TARGET#*@}:8081/"
-echo "    Health:  http://${TARGET#*@}:8080/healthz"
+echo "    Health:  http://127.0.0.1:18080/healthz"

@@ -2,8 +2,8 @@
 set -euo pipefail
  
 # --- Configuration ---
-REMOTE_HOST="web.lan"
-REMOTE_USER="filament"
+REMOTE_HOST="${FILAMENT_REMOTE_HOST:-192.168.88.241}"
+REMOTE_USER="${FILAMENT_REMOTE_USER:-filament}"
 CONTAINER="filament-db"
 DB_NAME="filament"
 DB_USER="filament"

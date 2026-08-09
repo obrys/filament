@@ -9,7 +9,7 @@ Image=localhost/filament-api:latest
 ContainerName=filament-api
 Network=filament.network
 NetworkAlias=api
-PublishPort=8080:8080
+PublishPort=127.0.0.1:18080:8080
 
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://+:8080

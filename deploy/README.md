@@ -6,6 +6,11 @@ shipping updates from a **Fedora Kinoite** desktop.
 
 The final footprint stays **below 1 GB of RAM**.
 
+The Quadlet units and deployment script also work on Ubuntu with Podman. On an
+Ubuntu services VM, create the dedicated `filament` user with subordinate UID/GID
+ranges, enable systemd lingering for it, and ensure `rsync` and SSH access are
+available. The FCOS Ignition step is not needed in that setup.
+
 ---
 
 ## Table of contents
@@ -191,7 +196,7 @@ systemctl --user start filament-api.service filament-web.service
 
 # Verify
 systemctl --user status filament-db filament-api filament-web
-curl -fsS http://localhost:8080/healthz   # → {"status":"ok"}
+curl -fsS http://localhost:18080/healthz   # → {"status":"ok"}
 ```
 
 Open in a browser: `http://<vm-ip>/`
