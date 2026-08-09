@@ -23,13 +23,21 @@ PLATFORM="linux/$ARCH"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-# Use podman if available (Kinoite default), else docker.
-ENGINE="${ENGINE:-$(command -v podman || command -v docker)}"
-if [[ -z "$ENGINE" ]]; then
-    echo "Neither podman nor docker found on PATH." >&2
+# Use local podman if available, else docker. When running inside a toolbox,
+# flatpak-spawn reaches the host's Podman daemon.
+if [[ -n "${ENGINE:-}" ]]; then
+    read -r -a ENGINE_CMD <<< "$ENGINE"
+elif command -v podman >/dev/null 2>&1; then
+    ENGINE_CMD=(podman)
+elif command -v docker >/dev/null 2>&1; then
+    ENGINE_CMD=(docker)
+elif [[ -f /run/.containerenv ]] && command -v flatpak-spawn >/dev/null 2>&1; then
+    ENGINE_CMD=(flatpak-spawn --host podman)
+else
+    echo "Neither podman nor docker found on PATH, and no toolbox host engine is available." >&2
     exit 1
 fi
-echo "==> Using container engine: $ENGINE"
+echo "==> Using container engine: ${ENGINE_CMD[*]}"
 echo "==> Target platform: $PLATFORM"
 
 API_TAG="localhost/filament-api:latest"
@@ -51,16 +59,16 @@ unset _base_commit _dirty_hash
 echo "==> Build version: $GIT_COMMIT"
 
 echo "==> Building API image"
-"$ENGINE" build --platform "$PLATFORM" --build-arg "GIT_COMMIT=$GIT_COMMIT" -t "$API_TAG" -f src/Filament.Api/Dockerfile .
+"${ENGINE_CMD[@]}" build --platform "$PLATFORM" --build-arg "GIT_COMMIT=$GIT_COMMIT" -t "$API_TAG" -f src/Filament.Api/Dockerfile .
 
 echo "==> Building Web image"
-"$ENGINE" build --platform "$PLATFORM" --build-arg "GIT_COMMIT=$GIT_COMMIT" -t "$WEB_TAG" -f web/Dockerfile web
+"${ENGINE_CMD[@]}" build --platform "$PLATFORM" --build-arg "GIT_COMMIT=$GIT_COMMIT" -t "$WEB_TAG" -f web/Dockerfile web
 
 echo "==> Streaming API image to $TARGET"
-"$ENGINE" save "$API_TAG" | ssh "$TARGET" "podman load"
+"${ENGINE_CMD[@]}" save "$API_TAG" | ssh "$TARGET" "podman load"
 
 echo "==> Streaming Web image to $TARGET"
-"$ENGINE" save "$WEB_TAG" | ssh "$TARGET" "podman load"
+"${ENGINE_CMD[@]}" save "$WEB_TAG" | ssh "$TARGET" "podman load"
 
 echo "==> Syncing Quadlet units"
 rsync -av --delete deploy/quadlets/ "$TARGET":~/.config/containers/systemd/
