@@ -31,7 +31,7 @@ rsync -av --delete deploy/quadlets/ \
 ./deploy/scripts/deploy.sh filament@SERVER amd64
 ```
 
-`deploy/scripts/deploy.sh` requires exactly two arguments: SSH target and `amd64` or `arm64`. It passes the selected `linux/<architecture>` platform to both image builds, so use `arm64` for a Raspberry Pi 5 and `amd64` for the existing x86_64 deployment. The local container engine must support building the selected platform; cross-architecture builds may require registered binfmt/QEMU emulation. The script chooses Podman when available (otherwise Docker) to build `localhost/filament-api:latest` and `localhost/filament-web:latest`, transfers both images through SSH, synchronizes Quadlets, reloads the remote user manager, waits for MariaDB health, restarts API and web, and polls `http://localhost:8080/healthz` on the server for up to about 60 seconds.
+`deploy/scripts/deploy.sh` requires exactly two arguments: SSH target and `amd64` or `arm64`. It passes the selected `linux/<architecture>` platform to both image builds, so use `arm64` for a Raspberry Pi 5 and `amd64` for the existing x86_64 deployment. The local container engine must support building the selected platform; cross-architecture builds may require registered binfmt/QEMU emulation. The script chooses Podman when available (otherwise Docker) to build `localhost/filament-api:latest` and `localhost/filament-web:latest`, transfers both images through SSH, synchronizes Quadlets, reloads the remote user manager, waits for MariaDB health, restarts API and web, and polls `http://localhost:18080/healthz` on the server for up to about 60 seconds.
 
 For a manual first start, connect as the deployment user and run:
 
@@ -40,10 +40,10 @@ systemctl --user daemon-reload
 systemctl --user start filament-db.service
 systemctl --user start filament-api.service filament-web.service
 systemctl --user status filament-db filament-api filament-web
-curl -fsS http://localhost:8080/healthz
+curl -fsS http://localhost:18080/healthz
 ```
 
-Open `http://SERVER:8081/` for the web UI. Port 8080 exposes the API directly. A separate nginx TLS reverse-proxy example is in `deploy/reverse-proxy/`; it proxies both normal requests and `/ws/` WebSocket upgrades to `web.lan:8081`. Restrict port 8081 to the proxy if that topology is used.
+Open `http://SERVER:8081/` for the web UI. Port 18080 (localhost only) exposes the API directly. A separate nginx TLS reverse-proxy example is in `deploy/reverse-proxy/`; it proxies both normal requests and `/ws/` WebSocket upgrades to `web.lan:8081`. Restrict port 8081 to the proxy if that topology is used.
 
 ## Routine operation
 
@@ -78,7 +78,7 @@ This is the supported remote administration method. It executes the MariaDB clie
 After direct data correction, use the web maintenance page or call the repair endpoint so cached spool status and remaining weights match enabled events:
 
 ```bash
-curl -X POST http://localhost:8080/api/spools/reevaluate
+curl -X POST http://localhost:18080/api/spools/reevaluate
 ```
 
 ## Backups and restore

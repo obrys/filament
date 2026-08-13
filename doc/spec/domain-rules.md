@@ -12,8 +12,11 @@ erDiagram
         string material
         string type
         string color
+        string colorHex "optional"
         int defaultNetWeightGrams
         int emptySpoolWeightGrams
+        string notes "optional"
+        datetime createdAt
     }
     SPOOL {
         string id PK
@@ -22,6 +25,11 @@ erDiagram
         int remainingGrams "derived cache"
         int emptySpoolWeightGramsOverride "optional"
         string status "derived cache"
+        datetime createdAt
+        datetime openedAt "derived cache"
+        datetime finishedAt "derived cache"
+        datetime lastUsedAt "derived cache"
+        string notes "optional"
     }
     SPOOL_EVENT {
         long id PK
@@ -30,6 +38,9 @@ erDiagram
         int deltaGrams
         bool isDisabled
         datetime occurredAt
+        string projectName "optional"
+        string projectUrl "optional"
+        string notes "optional"
     }
 ```
 
