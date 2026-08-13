@@ -1,3 +1,7 @@
 node_modules
 dist
 .vite
+
+# Compiled JS from TypeScript sources (do not commit)
+src/*.js
+src/**/*.js
