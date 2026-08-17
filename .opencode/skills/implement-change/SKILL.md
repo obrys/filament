@@ -15,6 +15,8 @@ Use this skill only for the implementation stage of a spec-driven change request
 - Preserve unrelated worktree changes. Do not revert user work.
 - Do not create Git commits, pull requests, or move the request to `doc/done`.
 - Do not make a material change to approved scope, architecture, technology, data model, security, or external dependencies without pausing for the user's decision.
+- If you need some tool, like `chromium`, `python`, `ffmpeg`, or similar which whould be helpful to finish the task, ask me for installation of it.
+- You do have a vision capability. You can take screeshot of the result by various tool to examine the output.
 
 ## Workflow
 

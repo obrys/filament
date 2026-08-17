@@ -144,6 +144,13 @@ th { font-weight: 600; color: var(--muted); font-size: 0.8rem; text-transform: u
 }
 @keyframes version-spin { to { transform: rotate(360deg); } }
 
+/* Print-labels copies dialog: reuses the version-overlay surface above the spool list */
+.print-dialog { width: 16rem; max-width: calc(100vw - 2rem); margin: 0; text-align: center; }
+.print-dialog h2 { margin-top: 0.5rem; }
+.print-dialog p { color: var(--muted); }
+.print-dialog label { text-align: left; }
+.print-dialog__actions { display: flex; gap: 0.5rem; justify-content: center; margin-top: 0.75rem; }
+
 .version-banner {
   position: fixed;
   left: 50%;

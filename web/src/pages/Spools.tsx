@@ -7,6 +7,17 @@ import { useFacetFilters } from '../hooks/useFacetFilters'
 
 const EMPTY_FACETS: Facets = { brand: [], material: [], type: [], color: [] }
 
+/** Browser-storage key for the last used label print copy count. */
+const LAST_COPIES_KEY = 'filament.labelCopies'
+
+const readLastCopies = () => {
+  try {
+    const raw = localStorage.getItem(LAST_COPIES_KEY)
+    const n = raw === null ? NaN : Number.parseInt(raw, 10)
+    return Number.isInteger(n) && n >= 1 && n <= 10 ? n : 1
+  } catch { return 1 } // storage may be unavailable
+}
+
 const SORT_OPTIONS: { value: SpoolSort; label: string }[] = [
   { value: 'lastUsed', label: 'Last used' },
   { value: 'leastRemaining', label: 'Least remaining' },
@@ -24,6 +35,8 @@ export function Spools() {
   const [includeFinished, setIncludeFinished] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showForm, setShowForm] = useState(false)
+  const [printDialogOpen, setPrintDialogOpen] = useState(false)
+  const [copiesValue, setCopiesValue] = useState('')
   const { selection, toggleOption, removeOption, clearAll } = useFacetFilters()
 
   const load = () => {
@@ -63,6 +76,20 @@ export function Spools() {
     setSelected(next)
   }
 
+  const openPrintDialog = () => {
+    setCopiesValue(String(readLastCopies()))
+    setPrintDialogOpen(true)
+  }
+
+  // An emptied or out-of-range (1..10) copies field falls back to a single copy.
+  const effectiveCopies = Number.isInteger(Number(copiesValue)) && Number(copiesValue) >= 1 && Number(copiesValue) <= 10 ? Number(copiesValue) : 1
+
+  const printLabels = () => {
+    try { localStorage.setItem(LAST_COPIES_KEY, String(effectiveCopies)) } catch { /* storage may be unavailable */ }
+    window.open(api.spools.labelPdfUrl([...selected], effectiveCopies), '_blank')
+    setPrintDialogOpen(false)
+  }
+
   return (
     <>
       <h1>Spools</h1>
@@ -78,11 +105,28 @@ export function Spools() {
             {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </label>
-        <button disabled={selected.size === 0}
-          onClick={() => window.open(api.spools.labelPdfUrl([...selected]), '_blank')}>
+        <button disabled={selected.size === 0} onClick={openPrintDialog}>
           Print labels ({selected.size})
         </button>
       </div>
+
+      {printDialogOpen && (
+        <div className="version-overlay">
+          <div className="card print-dialog" role="dialog" aria-label="Print labels">
+            <h2>Print labels</h2>
+            <p>{selected.size} spool{selected.size === 1 ? '' : 's'} selected</p>
+            <label>Copies
+              <input type="number" min={1} max={10} aria-label="Copies"
+                value={copiesValue} onChange={e => setCopiesValue(e.target.value)} />
+            </label>
+            <p>{selected.size * effectiveCopies} labels</p>
+            <div className="print-dialog__actions">
+              <button onClick={printLabels}>Print</button>
+              <button className="ghost" onClick={() => setPrintDialogOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showForm && <NewSpoolForm types={Object.values(types)} onCreated={() => { setShowForm(false); load() }} />}
 

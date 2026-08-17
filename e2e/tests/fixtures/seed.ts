@@ -29,9 +29,13 @@ export const test = base.extend<{ seed: Seed }>({
     await page.getByRole('button', { name: 'New spool' }).click()
     const spoolForm = page.locator('form.card')
     await spoolForm.getByLabel('Filament type').selectOption(typeId)
-    await spoolForm.getByRole('button', { name: 'Create', exact: true }).click()
-
-    const spoolId = await page.locator('tbody tr td a.id-pill').first().innerText()
+    const [resp] = await Promise.all([
+      page.waitForResponse(r => r.url().endsWith('/api/spools') && r.request().method() === 'POST'),
+      spoolForm.getByRole('button', { name: 'Create', exact: true }).click(),
+    ])
+    // The spool list is sorted by last-used desc / id asc, so the created spool is not
+    // guaranteed to be the first row — the id comes from the POST response.
+    const spoolId = (await resp.json()).id as string
     expect(spoolId).toMatch(/^[0-9A-HJ-NP-TV-Z]{4}$/)
 
     await use({ type: { id: typeId, brand, material, type: productType, color }, spool: { id: spoolId } })

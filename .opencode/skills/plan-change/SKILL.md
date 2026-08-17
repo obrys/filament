@@ -14,6 +14,7 @@ Use this skill only for the implementation-planning stage of a spec-driven chang
 - Read the original request, amendment, approved specification, relevant `doc/spec/` files, and the minimum relevant code and tests.
 - Do not edit application code, tests, or durable system documentation.
 - Do not choose unresolved product or architecture decisions. Surface them as blockers for the user.
+- You do have vision capability. Propose its use to prepare the implementation. Always think of a failure case (the vision is broken or inaccurate).
 
 ## Workflow
 

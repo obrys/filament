@@ -5,6 +5,7 @@
     <Project Path="src/Filament.Infrastructure/Filament.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Filament.Api.Tests/Filament.Api.Tests.csproj" />
     <Project Path="tests/Filament.Core.Tests/Filament.Core.Tests.csproj" />
     <Project Path="tests/Filament.Infrastructure.Tests/Filament.Infrastructure.Tests.csproj" />
   </Folder>

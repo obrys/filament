@@ -152,7 +152,12 @@ export const api = {
       http<Spool>(`/api/spools/${id}/events/${eventId}/disable`, { method: 'POST' }),
     reevaluate: () => http<ReevaluateResult>('/api/spools/reevaluate', { method: 'POST' }),
     delete: (id: string) => http<void>(`/api/spools/${id}`, { method: 'DELETE' }),
-    labelPdfUrl: (ids: string[]) => `/api/labels?${ids.map(i => `id=${encodeURIComponent(i)}`).join('&')}`,
+    labelPdfUrl: (ids: string[], copies?: number) => {
+      const p = new URLSearchParams()
+      for (const id of ids) p.append('id', id)
+      if (copies !== undefined) p.append('copies', String(copies))
+      return `/api/labels?${p.toString()}`
+    },
   },
   dashboard: {
     summary: () => http<DashboardSummary>('/api/dashboard/summary'),

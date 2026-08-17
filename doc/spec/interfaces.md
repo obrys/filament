@@ -8,7 +8,7 @@ The SPA has these browser routes:
 |---|---|
 | `/` | Dashboard counts and the last 30 days of consumption. |
 | `/types` | Filament-type list, facets, creation, and deletion. |
-| `/spools` | Spool list, facets, finished toggle, sort selector, creation, label selection, and link to repair. |
+| `/spools` | Spool list, facets, finished toggle, sort selector, creation, label selection with a print-copies dialog, and link to repair. |
 | `/spools/:id` | Spool details, current weights/status, lifecycle actions, and event history. |
 | `/spools/maintenance` | Re-evaluate all cached spool states. |
 
@@ -37,7 +37,7 @@ The API uses JSON and serializes enum values as strings. Successful mutations no
 | `POST /api/spools/reevaluate` | Repair cached state for all spools from their histories. |
 | `GET /api/dashboard/summary` | Return type, active-spool, finished-spool, and active-remaining totals. |
 | `GET /api/dashboard/usage?days=30` | Return daily consumed grams; `days` is clamped to 1-365. |
-| `GET /api/labels?id=ABCD&id=EFGH` | Download labels for one or more existing spool IDs. |
+| `GET /api/labels?id=ABCD&id=EFGH&copies=K` | Download labels for one or more existing spool IDs; optional `copies` (whole number 1–10, default 1) prints K identical copies per spool. |
 | `GET /healthz` | Liveness response: `{"status":"ok"}`. |
 | `GET /api/version` | Running backend build version; returns `503` while graceful shutdown is in progress. |
 
@@ -61,16 +61,22 @@ Each `SpoolDto` returned by `GET /api/spools` and `GET /api/spools/{id}` include
 
 `GET /api/labels` returns `application/pdf` with download name `spool-labels.pdf`. Unknown IDs are skipped; if none resolve, the request returns `404`. At least one `id` query value is required.
 
+An optional `copies` query parameter sets the number of identical labels per spool: `copies` missing or empty means 1 (one label per resolved spool, the prior behavior); a whole number from 1 to 10 produces that many contiguous copies of each spool; any other value (`0`, a negative number, a fraction such as `1.5`, a non-numeric `abc`, or `11`) returns `400` with no PDF. Copies of a spool stay adjacent and spools appear in the order their `id` values occur in the request, so `?id=A&id=B&copies=2` yields A, A, B, B; a repeated `id` occurrence each produces its own `copies` labels.
+
 ```mermaid
 flowchart LR
-    Select[Select spools] --> Request[GET /api/labels?id=...]
+    Select[Select spools] --> Dialog[Choose copies K: 1-10]
+    Dialog --> Request[GET /api/labels?id=...&copies=K]
     Request --> Resolve[Resolve spool and filament type]
-    Resolve --> QR[Build QR URL: public host /spools/spool-id]
-    QR --> PDF[Generate A4 PDF]
-    PDF --> Print[Print and attach label]
+    Resolve --> Expand[K contiguous copies per spool]
+    Expand --> QR[Build QR URL: public host /spools/spool-id]
+    QR --> PDF[Tiled A4 PDF, ceil(n/14) pages]
+    PDF --> Print[Print and attach labels]
 ```
 
-Each label is a bordered 70 x 35 mm panel. The generator tiles two labels per row on an A4 page with a 10 mm page margin. A label includes brand, material, type, colour name, a colour swatch only when its supplied hex value is a valid six- or eight-digit hex value, the spool ID, and a 28 mm QR code. The QR payload is an absolute spool page URL assembled from the request scheme and host seen by the API. Generate labels through the web endpoint, not direct API port 8080: the API host does not serve the SPA route embedded in the QR code. The supplied proxy preserves the public host, but the API does not enable forwarded-header processing; its current QR URLs behind TLS termination therefore use `http` and rely on the proxy's HTTP-to-HTTPS redirect. This remains functional with the supplied proxy but is relevant when deploying behind another proxy.
+Each label is a bordered 70 x 35 mm panel. The generator tiles two labels per row on an A4 page with a 10 mm page margin (14 labels per page); when the total exceeds 14, the PDF continues on additional A4 pages using the same tiling, rows are never split across pages, so the document has exactly `ceil(label count / 14)` pages. A label includes brand, material, type, colour name, a colour swatch only when its supplied hex value is a valid six- or eight-digit hex value, the spool ID, and a 28 mm QR code. The QR payload is an absolute spool page URL assembled from the request scheme and host seen by the API. Generate labels through the web endpoint, not direct API port 8080: the API host does not serve the SPA route embedded in the QR code. The supplied proxy preserves the public host, but the API does not enable forwarded-header processing; its current QR URLs behind TLS termination therefore use `http` and rely on the proxy's HTTP-to-HTTPS redirect. This remains functional with the supplied proxy but is relevant when deploying behind another proxy.
+
+On the `/spools` page, "Print labels (N)" opens an in-page dialog instead of directly opening a new tab. The dialog shows the selected spool count, a copies field (a whole number from 1 to 10, initialised from the last used value kept in browser storage or `1` when none is stored), the resulting label count (selected spools × copies), and Print / Cancel buttons. Print opens the label PDF in a new tab for the selected spools in their request order with `copies=K` and stores K as the last used value; an empty or out-of-range field falls back to `copies=1`. Cancel closes the dialog with no request and leaves the selection unchanged. See the completed [003 multiple copies of labels](../done/003-multiple-copies-of-labels/) change request for the full specification and rationale.
 
 ## Real-time and deployment behavior
 

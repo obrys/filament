@@ -16,7 +16,7 @@ The intended scale is approximately 50-150 filament types, 50-300 spools, and up
 - Create physical spools from a type, optionally overriding its default net and empty-spool weights. New spools start sealed.
 - Open a spool; record each print with grams consumed and optional project name and URL; set the remaining amount from a measured value; and explicitly finish or reopen it.
 - Review per-spool history, including running material balance and undone entries.
-- Filter types and spools by brand, material, product type, and colour; select multiple spools; and download a printable label PDF.
+- Filter types and spools by brand, material, product type, and colour; select multiple spools; and download a printable label PDF with a chosen number of identical copies per spool.
 - Sort the spool list by last used (default), least remaining, or most remaining. Sorting is performed by the backend and the active sort is reflected in the `/spools` URL.
 - See dashboard counts, active remaining stock, and daily consumption for the last 30 days.
 - Receive live notifications of changes made from another browser and recover automatically after a deployment restart.
