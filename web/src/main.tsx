@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Link } from 'react-router'
+import { BrowserRouter, Routes, Route, Link, NavLink } from 'react-router'
 import { Dashboard } from './pages/Dashboard'
 import { FilamentTypes } from './pages/FilamentTypes'
 import { Spools } from './pages/Spools'
@@ -9,7 +9,12 @@ import { SpoolMaintenance } from './pages/SpoolMaintenance'
 import { useChangeStream } from './realtime/useChangeStream'
 import { VersionGate } from './realtime/VersionGate'
 import { VersionBadge } from './components/VersionBadge'
+import { ThemeToggle } from './components/ThemeToggle'
+import { SpoolViz } from './components/SpoolViz'
+import { IconDashboard, IconSpool, IconTypes } from './components/icons'
 import './styles.css'
+
+const navClass = ({ isActive }: { isActive: boolean }) => (isActive ? 'is-active' : undefined)
 
 function App() {
   useChangeStream()
@@ -17,12 +22,16 @@ function App() {
     <BrowserRouter>
       <VersionGate />
       <header className="topbar">
-        <Link to="/" className="brand">🧵 Filament</Link>
+        <Link to="/" className="brand">
+          <SpoolViz size={30} fill={0.82} className="brand__mark" />
+          <span className="brand__text">Filament</span>
+        </Link>
         <nav>
-          <Link to="/">Dashboard</Link>
-          <Link to="/types">Types</Link>
-          <Link to="/spools">Spools</Link>
+          <NavLink to="/" end className={navClass}><IconDashboard /><span>Dashboard</span></NavLink>
+          <NavLink to="/types" className={navClass}><IconTypes /><span>Types</span></NavLink>
+          <NavLink to="/spools" className={navClass}><IconSpool /><span>Spools</span></NavLink>
         </nav>
+        <ThemeToggle />
       </header>
       <main>
         <Routes>

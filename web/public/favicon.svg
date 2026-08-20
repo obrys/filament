@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Filament">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#232a38"/>
+      <stop offset="1" stop-color="#0c0f16"/>
+    </linearGradient>
+    <linearGradient id="coil" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffb457"/>
+      <stop offset="0.5" stop-color="#ff7a18"/>
+      <stop offset="1" stop-color="#e2560a"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3f5fa"/>
+      <stop offset="1" stop-color="#aab4c8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+
+  <!-- loose strand feeding out from behind the coil -->
+  <path d="M38 26C47 21 50 13 56.5 14.5" fill="none" stroke="url(#coil)" stroke-width="3.6" stroke-linecap="round"/>
+
+  <!-- filament wound around the hub -->
+  <circle cx="32" cy="32" r="20.5" fill="url(#coil)"/>
+  <g stroke="#000" stroke-opacity="0.18" fill="none">
+    <circle cx="32" cy="32" r="18" stroke-width="1.2"/>
+    <circle cx="32" cy="32" r="15.2" stroke-width="1.2"/>
+    <circle cx="32" cy="32" r="12.4" stroke-width="1.2"/>
+  </g>
+  <circle cx="32" cy="32" r="20.5" fill="none" stroke="#fff" stroke-opacity="0.3" stroke-width="1.5"/>
+
+  <!-- hub + centre bore -->
+  <circle cx="32" cy="32" r="8.6" fill="url(#rim)"/>
+  <circle cx="32" cy="32" r="8.6" fill="none" stroke="#000" stroke-opacity="0.28" stroke-width="1"/>
+  <circle cx="32" cy="32" r="3" fill="#0c0f16"/>
+</svg>

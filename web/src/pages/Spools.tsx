@@ -3,6 +3,9 @@ import { Link, useSearchParams } from 'react-router'
 import { api, type Spool, type FilamentType, type Facets, type SpoolSort, isSpoolSort } from '../api/client'
 import { onChange } from '../realtime/useChangeStream'
 import { FilterBar } from '../components/FilterBar'
+import { SpoolViz } from '../components/SpoolViz'
+import { StatusBadge, TypeLine, RemainingGauge } from '../components/spool-bits'
+import { IconClose, IconInbox, IconPlus, IconPrinter, IconWrench } from '../components/icons'
 import { useFacetFilters } from '../hooks/useFacetFilters'
 
 const EMPTY_FACETS: Facets = { brand: [], material: [], type: [], color: [] }
@@ -92,21 +95,33 @@ export function Spools() {
 
   return (
     <>
-      <h1>Spools</h1>
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-        <button onClick={() => setShowForm(s => !s)}>{showForm ? 'Close' : 'New spool'}</button>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', margin: 0, width: 'auto' }}>
-          <input type="checkbox" style={{ width: 'auto' }} checked={includeFinished}
+      <div className="page-head">
+        <div>
+          <h1>Spools</h1>
+          <p className="page-head__sub">
+            {spools.length} spool{spools.length === 1 ? '' : 's'} in view
+            {selected.size > 0 && ` · ${selected.size} selected`}
+          </p>
+        </div>
+      </div>
+
+      <div className="toolbar">
+        <button onClick={() => setShowForm(s => !s)}>
+          {showForm ? <><IconClose /> Close</> : <><IconPlus /> New spool</>}
+        </button>
+        <label className={`control${includeFinished ? ' control--on' : ''}`}>
+          <input type="checkbox" checked={includeFinished}
             onChange={e => setIncludeFinished(e.target.checked)} /> Show finished
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', margin: 0, width: 'auto' }}>
+        <label className="control">
           Sort
           <select aria-label="Sort" value={sort} onChange={e => onSortChange(e.target.value)}>
             {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </label>
-        <button disabled={selected.size === 0} onClick={openPrintDialog}>
-          Print labels ({selected.size})
+        <span className="spacer" />
+        <button className="subtle" disabled={selected.size === 0} onClick={openPrintDialog}>
+          <IconPrinter /> Print labels ({selected.size})
         </button>
       </div>
 
@@ -119,9 +134,11 @@ export function Spools() {
               <input type="number" min={1} max={10} aria-label="Copies"
                 value={copiesValue} onChange={e => setCopiesValue(e.target.value)} />
             </label>
-            <p>{selected.size * effectiveCopies} labels</p>
+            <p className="print-dialog__count">
+              {selected.size * effectiveCopies} label{selected.size * effectiveCopies === 1 ? '' : 's'}
+            </p>
             <div className="print-dialog__actions">
-              <button onClick={printLabels}>Print</button>
+              <button onClick={printLabels}><IconPrinter /> Print</button>
               <button className="ghost" onClick={() => setPrintDialogOpen(false)}>Cancel</button>
             </div>
           </div>
@@ -138,38 +155,56 @@ export function Spools() {
         onClear={clearAll}
       />
 
-      <div className="card" style={{ marginTop: '1rem', padding: 0, overflowX: 'auto' }}>
+      <div className="card card--flush table-wrap" style={{ marginTop: '1rem' }}>
         <table>
           <thead>
             <tr>
-              <th></th><th>ID</th><th>Type</th><th>Remaining</th><th>Status</th><th></th>
+              <th style={{ width: '1%' }}></th><th>Spool</th><th>Filament</th><th>Remaining</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
             {spools.map(s => {
               const t = types[s.filamentTypeId]
+              const finished = s.status === 'Finished'
+              const fraction = s.initialNetGrams > 0 ? s.remainingGrams / s.initialNetGrams : 0
               return (
                 <tr key={s.id}>
-                  <td><input type="checkbox" style={{ width: 'auto' }} checked={selected.has(s.id)} onChange={() => toggle(s.id)} /></td>
-                  <td data-label="ID"><Link to={`/spools/${s.id}`} className="id-pill">{s.id}</Link></td>
-                  <td data-label="Type">
-                    {t ? <>{t.colorHex && <span className="swatch" style={{ background: t.colorHex }} />} {t.brand} · {t.material} · {t.type} · {t.color}</> : s.filamentTypeId}
+                  <td>
+                    <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggle(s.id)}
+                      aria-label={`Select spool ${s.id}`} />
+                  </td>
+                  <td data-label="Spool">
+                    <span className="spool-cell">
+                      <SpoolViz colorHex={t?.colorHex} fill={finished ? 0 : fraction} size={38} dimmed={finished} />
+                      <Link to={`/spools/${s.id}`} className="id-pill">{s.id}</Link>
+                    </span>
+                  </td>
+                  <td data-label="Filament">
+                    {t ? <TypeLine type={t} /> : <span className="mono muted">{s.filamentTypeId}</span>}
                   </td>
                   <td data-label="Remaining">
-                    {s.status === 'Finished'
-                      ? <abbr title={`Actually ${s.remainingGrams} g remaining`}>0 g</abbr>
-                      : `${s.remainingGrams} g`}
+                    {finished
+                      ? <abbr title={`Actually ${s.remainingGrams} g remaining`} className="muted">0 g</abbr>
+                      : <RemainingGauge remaining={s.remainingGrams} initial={s.initialNetGrams} />}
                   </td>
-                  <td data-label="Status">{s.status}</td>
+                  <td data-label="Status"><StatusBadge status={s.status} /></td>
                   <td></td>
                 </tr>
               )
             })}
           </tbody>
         </table>
+        {spools.length === 0 && (
+          <div className="empty-state">
+            <IconInbox />
+            <strong>No spools here</strong>
+            <span>Adjust the filters, or add a spool to get started.</span>
+          </div>
+        )}
       </div>
 
-      <p className="muted" style={{ marginTop: '1rem', fontSize: '0.95rem' }}>
+      <p className="muted" style={{ marginTop: '1.25rem' }}>
+        <IconWrench style={{ width: 15, height: 15, verticalAlign: '-2px', marginRight: '0.35rem' }} />
         Something look off? <Link to="/spools/maintenance">Re-evaluate spool states</Link>.
       </p>
     </>
@@ -195,7 +230,8 @@ function NewSpoolForm({ types, onCreated }: { types: FilamentType[]; onCreated: 
     } catch (err: any) { alert(err.message) }
   }
   return (
-    <form className="card" onSubmit={submit} style={{ marginTop: '1rem' }}>
+    <form className="card card--accent" onSubmit={submit} style={{ marginTop: '1rem' }}>
+      <h3>New spool</h3>
       <div className="grid">
         <label>Filament type
           <select value={filamentTypeId} onChange={e => setFilamentTypeId(e.target.value)}>
@@ -212,7 +248,7 @@ function NewSpoolForm({ types, onCreated }: { types: FilamentType[]; onCreated: 
           <input value={notes} onChange={e => setNotes(e.target.value)} />
         </label>
       </div>
-      <button type="submit" disabled={!filamentTypeId} style={{ marginTop: '0.5rem' }}>Create</button>
+      <button type="submit" disabled={!filamentTypeId} style={{ marginTop: '0.85rem' }}>Create</button>
     </form>
   )
 }

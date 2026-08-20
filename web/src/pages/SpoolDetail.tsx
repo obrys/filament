@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router'
 import { api, type Spool, type SpoolEvent, type FilamentType } from '../api/client'
 import { onChange } from '../realtime/useChangeStream'
-
-/** Below this fraction of the initial net weight, the Finish action is visually promoted. */
-const LOW_FRACTION = 0.05
+import { SpoolViz } from '../components/SpoolViz'
+import { LOW_FRACTION, StatusBadge } from '../components/spool-bits'
+import { IconAlert, IconArrowLeft, IconCheck, IconHistory, IconPrinter, IconScale } from '../components/icons'
 
 export function SpoolDetail() {
   const { id = '' } = useParams()
@@ -25,7 +25,7 @@ export function SpoolDetail() {
     return onChange(m => { if (m.resource === 'spool' && (!m.id || m.id === id)) load() })
   }, [id])
 
-  if (!spool || !type) return <p>Loading…</p>
+  if (!spool || !type) return <p className="muted">Loading…</p>
 
   const act = async (fn: () => Promise<unknown>) => {
     try { await fn(); await load() } catch (err: any) { alert(err.message) }
@@ -35,36 +35,72 @@ export function SpoolDetail() {
   // The active (enabled) Finish event, if any — undoing it reopens the spool.
   const activeFinish = events.find(e => e.kind === 'Finished' && !e.isDisabled)
 
+  const finished = spool.status === 'Finished'
+  const fraction = spool.initialNetGrams > 0 ? Math.min(1, Math.max(0, spool.remainingGrams / spool.initialNetGrams)) : 0
+  const percent = Math.round(fraction * 100)
+
   return (
     <>
-      <p><Link to="/spools">← All spools</Link></p>
-      <h1>
-        {type.colorHex && <span className="swatch" style={{ background: type.colorHex }} />}{' '}
-        {type.brand} {type.material} · {type.color} <span className="id-pill">{spool.id}</span>
-      </h1>
-      <div className="card">
-        <div><strong>Remaining:</strong> {spool.remainingGrams} g (initial {spool.initialNetGrams} g)</div>
-        <div><strong>Total weight (incl. spool):</strong> {spool.totalWeightGrams} g</div>
-        <div><strong>Empty spool:</strong> {spool.effectiveEmptySpoolGrams} g {spool.emptySpoolWeightGramsOverride && <span className="muted">(override)</span>}</div>
-        <div><strong>Status:</strong> {spool.status}</div>
-        {spool.openedAt && <div className="muted">Opened {new Date(spool.openedAt).toLocaleString()}</div>}
-        {spool.finishedAt && <div className="muted">Finished {new Date(spool.finishedAt).toLocaleString()}</div>}
-      </div>
+      <Link to="/spools" className="back-link"><IconArrowLeft style={{ width: 15, height: 15 }} /> All spools</Link>
+
+      <section className="spool-hero">
+        <div className="spool-hero__art">
+          <SpoolViz
+            colorHex={type.colorHex}
+            fill={finished ? 0 : fraction}
+            size={168}
+            spin={spool.status === 'Open'}
+            dimmed={finished}
+          />
+          <div className={`spool-hero__pct${lowOnFilament && !finished ? ' is-low' : ''}`}>
+            {finished ? 'empty' : `${percent}%`}
+          </div>
+        </div>
+        <div className="spool-hero__body">
+          <h1>
+            {type.colorHex && <span className="swatch swatch--lg" style={{ background: type.colorHex }} />}
+            {type.brand} {type.material} · {type.color} <span className="id-pill">{spool.id}</span>
+          </h1>
+          <div className="meta-row" style={{ marginTop: '0.35rem' }}>
+            <StatusBadge status={spool.status} />
+            {lowOnFilament && !finished && <span className="badge badge--low">Running low</span>}
+            <span className="muted">{type.type} · type <span className="mono">{type.id}</span></span>
+          </div>
+
+          <div className="specs">
+            <div className="spec"><strong>Remaining:</strong> {spool.remainingGrams} g (initial {spool.initialNetGrams} g)</div>
+            <div className="spec"><strong>Total weight (incl. spool):</strong> {spool.totalWeightGrams} g</div>
+            <div className="spec">
+              <strong>Empty spool:</strong> {spool.effectiveEmptySpoolGrams} g{' '}
+              {spool.emptySpoolWeightGramsOverride && <span className="muted">(override)</span>}
+            </div>
+            <div className="spec"><strong>Status:</strong> {spool.status}</div>
+          </div>
+
+          <div className="meta-row" style={{ marginTop: '0.75rem' }}>
+            {spool.openedAt && <span className="muted">Opened {new Date(spool.openedAt).toLocaleString()}</span>}
+            {spool.finishedAt && <span className="muted">Finished {new Date(spool.finishedAt).toLocaleString()}</span>}
+          </div>
+        </div>
+      </section>
 
       {spool.status === 'Sealed' && (
-        <div className="card">
-          <p style={{ marginTop: 0 }}>This spool is sealed. Open it to start recording prints.</p>
+        <div className="card card--accent">
+          <h3>Sealed spool</h3>
+          <p className="muted">Open it to start recording prints — the clock starts when the bag does.</p>
           <button onClick={() => act(() => api.spools.open(spool.id))}>Open spool</button>
         </div>
       )}
 
       {spool.status === 'Open' && (
         <>
-          <ConsumeForm spoolId={spool.id} onDone={load} max={spool.remainingGrams} />
-          <AdjustForm spoolId={spool.id} onDone={load} />
-          <div className="card">
-            <h2 style={{ marginTop: 0 }}>Finish spool</h2>
-            <p className="muted" style={{ marginTop: 0 }}>
+          <div className="grid grid--forms">
+            <ConsumeForm spoolId={spool.id} onDone={load} max={spool.remainingGrams} />
+            <AdjustForm spoolId={spool.id} onDone={load} />
+          </div>
+          <div className={`card${lowOnFilament ? ' card--accent' : ''}`}>
+            <h3><IconCheck style={{ width: 16, height: 16, verticalAlign: '-3px', marginRight: '0.35rem' }} />Finish spool</h3>
+            <p className="muted">
               {lowOnFilament
                 ? 'This spool looks nearly empty — mark it finished when done.'
                 : 'Mark this spool as finished. This does not change the remaining weight.'}
@@ -77,30 +113,39 @@ export function SpoolDetail() {
 
       {spool.status === 'Finished' && activeFinish && (
         <div className="card">
-          <p style={{ marginTop: 0 }}>This spool is finished.</p>
+          <h3>This spool is finished</h3>
+          <p className="muted">Reopen it if it was retired by mistake — the history stays intact.</p>
           <button className="ghost" onClick={() => act(() => api.spools.disableEvent(spool.id, activeFinish.id))}>
             Reopen spool
           </button>
         </div>
       )}
 
-      <h2>History</h2>
-      <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+      <div className="section-title">
+        <IconHistory style={{ width: 18, height: 18, color: 'var(--accent)' }} />
+        <h2>History</h2>
+        <span className="section-title__rule" />
+        <span className="muted mono">{events.length} events</span>
+      </div>
+
+      <div className="card card--flush table-wrap">
         <table>
           <thead><tr><th>When</th><th>Kind</th><th>Δ</th><th>After</th><th>Project</th><th>Notes</th><th></th></tr></thead>
           <tbody>
             {events.map(e => (
               <tr key={e.id} className={e.isDisabled ? 'event-disabled' : undefined}>
-                <td data-label="When">{new Date(e.occurredAt).toLocaleString()}</td>
-                <td data-label="Kind">{e.kind}</td>
-                <td data-label="Δ">{e.deltaGrams > 0 ? '+' : ''}{e.deltaGrams} g</td>
-                <td data-label="After">{e.remainingAfterGrams === null ? '—' : `${e.remainingAfterGrams} g`}</td>
+                <td data-label="When" className="muted mono">{new Date(e.occurredAt).toLocaleString()}</td>
+                <td data-label="Kind"><span className={`ev ev--${e.kind.toLowerCase()}`}>{e.kind}</span></td>
+                <td data-label="Δ" className={`num ${e.deltaGrams < 0 ? 'is-neg' : e.deltaGrams > 0 ? 'is-pos' : ''}`}>
+                  {e.deltaGrams > 0 ? '+' : ''}{e.deltaGrams} g
+                </td>
+                <td data-label="After" className="num">{e.remainingAfterGrams === null ? '—' : `${e.remainingAfterGrams} g`}</td>
                 <td data-label="Project">
                   {e.projectUrl
                     ? <a href={e.projectUrl} target="_blank" rel="noreferrer">{e.projectName ?? e.projectUrl}</a>
                     : (e.projectName ?? '')}
                 </td>
-                <td data-label="Notes">{e.notes ?? ''}</td>
+                <td data-label="Notes" className="muted">{e.notes ?? ''}</td>
                 <td data-label="">
                   {e.kind !== 'Created' && (
                     e.isDisabled
@@ -128,13 +173,13 @@ function ConsumeForm({ spoolId, onDone, max }: { spoolId: string; onDone: () => 
   }
   return (
     <form className="card" onSubmit={submit}>
-      <h2 style={{ marginTop: 0 }}>Record a print</h2>
-      <div className="grid">
-        <label>Grams used (max {max})<input type="number" min={1} max={max} required value={grams || ''} onChange={e => setGrams(+e.target.value)} /></label>
-        <label>Project name<input value={projectName} onChange={e => setProjectName(e.target.value)} /></label>
-        <label>Project URL<input value={projectUrl} onChange={e => setProjectUrl(e.target.value)} /></label>
-      </div>
-      <button type="submit" disabled={!grams || grams > max} style={{ marginTop: '0.5rem' }}>Consume</button>
+      <h3><IconPrinter style={{ width: 16, height: 16, verticalAlign: '-3px', marginRight: '0.35rem' }} />Record a print</h3>
+      <label>Grams used (max {max})
+        <input type="number" min={1} max={max} required value={grams || ''} onChange={e => setGrams(+e.target.value)} />
+      </label>
+      <label>Project name<input value={projectName} onChange={e => setProjectName(e.target.value)} placeholder="Benchy v3" /></label>
+      <label>Project URL<input value={projectUrl} onChange={e => setProjectUrl(e.target.value)} placeholder="https://…" /></label>
+      <button type="submit" disabled={!grams || grams > max} style={{ marginTop: '0.85rem' }}>Consume</button>
     </form>
   )
 }
@@ -150,12 +195,16 @@ function AdjustForm({ spoolId, onDone }: { spoolId: string; onDone: () => void }
   }
   return (
     <form className="card" onSubmit={submit}>
-      <h2 style={{ marginTop: 0 }}>Adjust remaining (weighed)</h2>
-      <div className="grid">
-        <label>New remaining (g)<input type="number" min={0} required value={grams} onChange={e => setGrams(e.target.value === '' ? '' : +e.target.value)} /></label>
-        <label>Notes<input value={notes} onChange={e => setNotes(e.target.value)} /></label>
-      </div>
-      <button type="submit" className="ghost" style={{ marginTop: '0.5rem' }}>Adjust</button>
+      <h3><IconScale style={{ width: 16, height: 16, verticalAlign: '-3px', marginRight: '0.35rem' }} />Adjust remaining (weighed)</h3>
+      <p className="muted" style={{ fontSize: '0.82rem' }}>
+        <IconAlert style={{ width: 14, height: 14, verticalAlign: '-2px', marginRight: '0.3rem' }} />
+        Put the spool on a scale and subtract the empty-spool weight.
+      </p>
+      <label>New remaining (g)
+        <input type="number" min={0} required value={grams} onChange={e => setGrams(e.target.value === '' ? '' : +e.target.value)} />
+      </label>
+      <label>Notes<input value={notes} onChange={e => setNotes(e.target.value)} /></label>
+      <button type="submit" className="ghost" style={{ marginTop: '0.85rem' }}>Adjust</button>
     </form>
   )
 }
