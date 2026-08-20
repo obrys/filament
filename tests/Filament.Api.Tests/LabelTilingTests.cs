@@ -48,14 +48,13 @@ public class LabelTilingTests
 
     [Theory]
     [InlineData(1, 1)]
-    [InlineData(13, 13)]
-    [InlineData(14, 14)]
-    [InlineData(15, 14, 1)]
-    [InlineData(16, 14, 2)]
-    [InlineData(20, 14, 6)]
-    [InlineData(28, 14, 14)]
-    [InlineData(100, 14, 14, 14, 14, 14, 14, 14, 2)]
-    public void Paginate_SplitsIntoPagesOfAtMostFourteen(int count, params int[] expectedPageSizes)
+    [InlineData(20, 20)]
+    [InlineData(21, 21)]
+    [InlineData(22, 21, 1)]
+    [InlineData(42, 21, 21)]
+    [InlineData(43, 21, 21, 1)]
+    [InlineData(100, 21, 21, 21, 21, 16)]
+    public void Paginate_SplitsIntoPagesOfAtMostTwentyOne(int count, params int[] expectedPageSizes)
     {
         var labels = Enumerable.Range(0, count).Select(i => Label(i.ToString("D2", CultureInfo.InvariantCulture))).ToList();
         var pages = LabelPdfGenerator.Paginate(labels)

@@ -40,11 +40,14 @@ public class LabelsControllerTests
         };
     }
 
-    private static void AssertSinglePagePdf(FileContentResult file)
+    private static void AssertSinglePagePdf(FileContentResult file) => AssertPdfPageCount(file, 1);
+
+    private static void AssertPdfPageCount(FileContentResult file, int expectedPages)
     {
         var first = Regex.Match(PdfText(file.FileContents), @"/Count\s+(\d+)");
         Assert.True(first.Success, "page tree /Count is missing");
-        Assert.Equal("1", first.Groups[1].Value);
+        Assert.Equal(expectedPages.ToString(System.Globalization.CultureInfo.InvariantCulture), first.Groups[1].Value);
+        Assert.Equal(expectedPages, Regex.Count(PdfText(file.FileContents), @"/Type /Page(?!s)"));
     }
 
     private static string PdfText(byte[] bytes) => Encoding.Latin1.GetString(bytes);
@@ -100,5 +103,18 @@ public class LabelsControllerTests
         Assert.Equal("application/pdf", file.ContentType);
         Assert.Equal("spool-labels.pdf", file.FileDownloadName);
         AssertSinglePagePdf(file);
+    }
+
+    [Theory]
+    [InlineData(21, 1)]
+    [InlineData(22, 2)]
+    [InlineData(43, 3)]
+    public async Task PageBreak_AfterTwentyOneLabels(int spoolCount, int expectedPages)
+    {
+        var ids = Enumerable.Range(0, spoolCount).Select(i => $"P{i:D4}").ToArray();
+        var controller = CreateController(ids);
+        var result = await controller.Generate(ids, null, CancellationToken.None);
+        var file = Assert.IsType<FileContentResult>(result);
+        AssertPdfPageCount(file, expectedPages);
     }
 }

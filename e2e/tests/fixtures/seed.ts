@@ -8,10 +8,10 @@ export type Seed = {
 
 export const test = base.extend<{ seed: Seed }>({
   seed: async ({ page }, use) => {
-    const brand = unique('e2e-brand')
-    const material = unique('e2e-mat')
-    const productType = unique('e2e-type')
-    const color = unique('e2e-color')
+    const brand = unique('eb')
+    const material = unique('em')
+    const productType = unique('et')
+    const color = unique('ec')
 
     await page.goto('/types')
     await page.getByRole('button', { name: 'New type' }).click()
