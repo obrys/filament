@@ -217,17 +217,34 @@ public sealed class DashboardRepository : IDashboardRepository
         return new DashboardSummary(typeCount, active, finished, totalRemaining);
     }
 
-    public async Task<IReadOnlyList<DailyUsage>> GetUsageAsync(int days, CancellationToken ct = default)
+    public async Task<IReadOnlyList<DailySeries>> GetSeriesAsync(int days, CancellationToken ct = default)
     {
-        var since = DateTimeOffset.UtcNow.AddDays(-days);
-        var raw = await _db.SpoolEvents.AsNoTracking()
-            .Where(e => e.OccurredAt >= since && e.DeltaGrams < 0 && !e.IsDisabled)
-            .Select(e => new { e.OccurredAt, e.DeltaGrams })
+        // UTC "today" as supplied to the pure derivation, so it stays deterministic/testable.
+        var endDay = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime);
+
+        // Every spool (including finished) plus its full event history is needed so the window-start
+        // running balance and finish state are right. SpoolSeries filters to enabled events, which is
+        // what makes undo/redo and deletion flow straight through. Single-user scale — unbounded read
+        // is intentional (see plan Risks).
+        var spools = await _db.Spools.AsNoTracking()
+            .Select(s => new { s.Id, s.InitialNetGrams })
             .ToListAsync(ct);
-        return raw
-            .GroupBy(x => DateOnly.FromDateTime(x.OccurredAt.UtcDateTime))
-            .Select(g => new DailyUsage(g.Key, -g.Sum(x => x.DeltaGrams)))
-            .OrderBy(d => d.Day)
+        var events = await _db.SpoolEvents.AsNoTracking().ToListAsync(ct);
+
+        var eventsBySpool = events
+            .GroupBy(e => e.SpoolId)
+            .ToDictionary(g => g.Key, g => g.Select(EntityMapping.ToDomain).ToList());
+
+        var inputs = spools
+            .Select(s => new SpoolSeriesInput(
+                s.Id,
+                s.InitialNetGrams,
+                eventsBySpool.TryGetValue(s.Id, out var evs) ? evs : new List<SpoolEvent>()))
+            .ToList();
+
+        return SpoolSeries
+            .BuildSeries(inputs, endDay, days)
+            .Select(p => new DailySeries(p.Day, p.ConsumedGrams, p.TotalStockGrams))
             .ToList();
     }
 }

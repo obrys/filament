@@ -22,7 +22,7 @@ public sealed class DashboardController : ControllerBase
     [HttpGet("usage")]
     public async Task<IReadOnlyList<DailyUsageDto>> Usage([FromQuery] int days = 30, CancellationToken ct = default)
     {
-        var u = await _repo.GetUsageAsync(Math.Clamp(days, 1, 365), ct);
-        return u.Select(x => new DailyUsageDto(x.Day, x.ConsumedGrams)).ToList();
+        var series = await _repo.GetSeriesAsync(Math.Clamp(days, 1, 365), ct);
+        return series.Select(x => new DailyUsageDto(x.Day, x.ConsumedGrams, x.TotalStockGrams)).ToList();
     }
 }

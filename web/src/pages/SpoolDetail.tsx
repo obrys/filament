@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router'
+import { useParams, useNavigate, Link } from 'react-router'
 import { api, type Spool, type SpoolEvent, type FilamentType } from '../api/client'
 import { onChange } from '../realtime/useChangeStream'
 import { SpoolViz } from '../components/SpoolViz'
@@ -8,6 +8,7 @@ import { IconAlert, IconArrowLeft, IconCheck, IconHistory, IconPrinter, IconScal
 
 export function SpoolDetail() {
   const { id = '' } = useParams()
+  const navigate = useNavigate()
   const [spool, setSpool] = useState<Spool | null>(null)
   const [type, setType] = useState<FilamentType | null>(null)
   const [events, setEvents] = useState<SpoolEvent[]>([])
@@ -34,6 +35,19 @@ export function SpoolDetail() {
   const lowOnFilament = spool.remainingGrams <= spool.initialNetGrams * LOW_FRACTION
   // The active (enabled) Finish event, if any — undoing it reopens the spool.
   const activeFinish = events.find(e => e.kind === 'Finished' && !e.isDisabled)
+
+  // A spool can be deleted once every non-creation event has been disabled (wound back). The
+  // Created event can never be disabled, so it is the only event allowed to stay enabled.
+  const canDelete = events.length > 0 && events.every(e => e.kind === 'Created' || e.isDisabled)
+  const deleteTitle = canDelete
+    ? 'Delete this spool and its entire history'
+    : 'A spool can be deleted only when all of its events have been disabled.'
+
+  const doDelete = async () => {
+    if (!canDelete) return
+    if (!confirm(`Delete spool ${spool.id}? This permanently removes the spool and all of its events.`)) return
+    try { await api.spools.delete(spool.id); navigate('/spools') } catch (err: any) { alert(err.message) }
+  }
 
   const finished = spool.status === 'Finished'
   const fraction = spool.initialNetGrams > 0 ? Math.min(1, Math.max(0, spool.remainingGrams / spool.initialNetGrams)) : 0
@@ -120,6 +134,18 @@ export function SpoolDetail() {
           </button>
         </div>
       )}
+
+      <div className="card card--danger">
+        <h3>Delete spool</h3>
+        <p className="muted">
+          A spool can only be deleted once every one of its events has been disabled (undone).
+          Deleting removes the spool and all of its events from the totals.
+        </p>
+        <button className="danger" disabled={!canDelete} title={deleteTitle} onClick={doDelete}
+          data-testid="delete-spool">
+          Delete spool
+        </button>
+      </div>
 
       <div className="section-title">
         <IconHistory style={{ width: 18, height: 18, color: 'var(--accent)' }} />

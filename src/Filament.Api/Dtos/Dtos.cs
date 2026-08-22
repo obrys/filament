@@ -93,7 +93,7 @@ public sealed record DashboardSummaryDto(
     int FinishedSpoolCount,
     int TotalRemainingGrams);
 
-public sealed record DailyUsageDto(DateOnly Day, int ConsumedGrams);
+public sealed record DailyUsageDto(DateOnly Day, int ConsumedGrams, int TotalStockGrams);
 
 // --- Faceted filtering ---
 

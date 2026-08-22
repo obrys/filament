@@ -8,6 +8,7 @@ API="filament-e2e-api"
 WEB="filament-e2e-web"
 API_PORT="${E2E_API_PORT:-18080}"
 WEB_PORT="${E2E_WEB_PORT:-15173}"
+DB_PORT="${E2E_DB_PORT:-13307}"
 READY_TIMEOUT="${E2E_READY_TIMEOUT:-90}"
 
 if [ "${1:-}" = "--no-capture-evidence" ]; then
@@ -54,6 +55,10 @@ if port_in_use "$WEB_PORT"; then
   echo "ERROR: Port $WEB_PORT is already in use. Set E2E_WEB_PORT to override." >&2
   exit 1
 fi
+if port_in_use "$DB_PORT"; then
+  echo "ERROR: Port $DB_PORT is already in use. Set E2E_DB_PORT to override." >&2
+  exit 1
+fi
 
 # --- Build images ------------------------------------------------------------
 echo "Building API image..."
@@ -68,6 +73,7 @@ echo "Creating network $NETWORK..."
 # --- Start DB ----------------------------------------------------------------
 echo "Starting DB container..."
 "${E2E_CLI[@]}" run -d --rm --name "$DB" --network "$NETWORK" \
+  -p "$DB_PORT:3306" \
   -e MARIADB_DATABASE=filament \
   -e MARIADB_USER=filament \
   -e MARIADB_PASSWORD=filament \
@@ -148,6 +154,10 @@ if [ "${PLAYWRIGHT_CAPTURE_EVIDENCE:-1}" = "0" ]; then
 else
   echo "Running Playwright tests with screenshots, video, and traces..."
 fi
+# Host ports the API/DB are reachable on from the test process (for direct seeding + reevaluate).
+export E2E_API_PORT="$API_PORT"
+export E2E_DB_HOST_PORT="$DB_PORT"
+
 cd "$REPO_ROOT/e2e"
 TEST_EXIT=0
 npx playwright test "$@" || TEST_EXIT=$?

@@ -6,13 +6,15 @@ The SPA has these browser routes:
 
 | Route | Purpose |
 |---|---|
-| `/` | Dashboard counts and the last 30 days of consumption. |
+| `/` | Dashboard counts, used/busiest figures, and the two-line consumption graph (total stock on the left axis, consumed on the right axis) over the last 30 UTC days. |
 | `/types` | Filament-type list, facets, creation, and deletion. |
 | `/spools` | Spool list, facets, finished toggle, sort selector, creation, label selection with a print-copies dialog, and link to repair. |
-| `/spools/:id` | Spool details, current weights/status, lifecycle actions, and event history. |
+| `/spools/:id` | Spool details, current weights/status, lifecycle actions, spool deletion, and event history. |
 | `/spools/maintenance` | Re-evaluate all cached spool states. |
 
 The web container serves the SPA and reverse-proxies `/api/` and `/ws/` to the API. Browser history routes resolve to `index.html`. Hashed assets are cached for one year; the HTML shell is deliberately not cached, so a deploy can load a matching client bundle.
+
+The dashboard's consumption graph is a hand-built inline-SVG plot (no charting library) over a fixed 30-day UTC window, rendering only the zero-filled values the usage endpoint provides. A "Total stock" line (theme `--cyan`) binds to the left axis and a "Consumed" line (theme `--accent`) to the right axis, with a two-entry legend. Each axis is a dotted kilogram ruler drawn in its line's color (including its labels): 3-6 ticks whose top snaps up to a nice kilogram multiple (steps of 0.25, 0.5, 1, 2, 2.5, 5, 10, ...), floored at 1 kg, and the two axes always use different tick counts so their grids never align. Six to eight x-axis month-day labels (always including the window's first day and today, formatted from the UTC day value) each get a grey dotted vertical gridline. Hovering the plot highlights the nearest day and a readout fixed in the chart header next to the legend shows that day's date and both exact values in whole grams; hovering another day updates the readout day by day, and leaving the plot (or tapping outside it, the touch replacement) hides both. All chart ink uses theme variables, so it re-themes with the light/dark mode. See the completed [005 consumption graph](../done/005-consumption-graph/) change request.
 
 ## HTTP API
 
@@ -36,7 +38,7 @@ The API uses JSON and serializes enum values as strings. Successful mutations no
 | `POST /api/spools/{id}/events/{eventId}/enable` | Redo an event subject to lifecycle guards. |
 | `POST /api/spools/reevaluate` | Repair cached state for all spools from their histories. |
 | `GET /api/dashboard/summary` | Return type, active-spool, finished-spool, and active-remaining totals. |
-| `GET /api/dashboard/usage?days=30` | Return daily consumed grams; `days` is clamped to 1-365. |
+| `GET /api/dashboard/usage?days=30` | Return a zero-filled, consecutive per-day series: `consumedGrams` (enabled prints only) and `totalStockGrams` (reconstructed remaining grams on non-finished spools) for every day of the window; `days` is clamped to 1-365. |
 | `GET /api/labels?id=ABCD&id=EFGH&copies=K` | Download labels for one or more existing spool IDs; optional `copies` (whole number 1–10, default 1) prints K identical copies per spool. |
 | `GET /healthz` | Liveness response: `{"status":"ok"}`. |
 | `GET /api/version` | Running backend build version; returns `503` while graceful shutdown is in progress. |

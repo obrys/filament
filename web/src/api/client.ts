@@ -63,7 +63,7 @@ export type DashboardSummary = {
   totalRemainingGrams: number
 }
 
-export type DailyUsage = { day: string; consumedGrams: number }
+export type DailySeries = { day: string; consumedGrams: number; totalStockGrams: number }
 
 export type FacetOption = { value: string; count: number }
 export type Facets = {
@@ -161,6 +161,6 @@ export const api = {
   },
   dashboard: {
     summary: () => http<DashboardSummary>('/api/dashboard/summary'),
-    usage: (days = 30) => http<DailyUsage[]>(`/api/dashboard/usage?days=${days}`),
+    usage: (days = 30) => http<DailySeries[]>(`/api/dashboard/usage?days=${days}`),
   },
 }

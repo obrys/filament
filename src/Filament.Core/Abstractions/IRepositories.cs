@@ -50,7 +50,7 @@ public sealed record SpoolReevaluation(
 public interface IDashboardRepository
 {
     Task<DashboardSummary> GetSummaryAsync(CancellationToken ct = default);
-    Task<IReadOnlyList<DailyUsage>> GetUsageAsync(int days, CancellationToken ct = default);
+    Task<IReadOnlyList<DailySeries>> GetSeriesAsync(int days, CancellationToken ct = default);
 }
 
 public sealed record DashboardSummary(
@@ -59,7 +59,8 @@ public sealed record DashboardSummary(
     int FinishedSpoolCount,
     int TotalRemainingGrams);
 
-public sealed record DailyUsage(DateOnly Day, int ConsumedGrams);
+/// <summary>One day of the consumption series: grams printed and remaining stock, zero-filled.</summary>
+public sealed record DailySeries(DateOnly Day, int ConsumedGrams, int TotalStockGrams);
 
 /// <summary>Broadcasts data-change notifications to connected clients.</summary>
 public interface IChangeNotifier

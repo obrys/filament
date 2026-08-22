@@ -148,7 +148,7 @@ npm --prefix e2e run e2e -- --no-capture-evidence
 
 `--capture-evidence` remains accepted as an explicit opt-in alias.
 
-Default host ports are `18080` (API) and `15173` (web), overridable via `E2E_API_PORT` and `E2E_WEB_PORT`. Tests use unique per-run values for seeded data, so the suite is safe to run repeatedly or in parallel without collisions. See the completed [002 Playwright Test Tool](../done/002-playwright-test-tool/) change request for the full design.
+Default host ports are `18080` (API), `15173` (web), and `13307` (database), overridable via `E2E_API_PORT`, `E2E_WEB_PORT`, and `E2E_DB_PORT`. The runner also exports the e2e database port (`E2E_DB_HOST_PORT`) so test fixtures can seed past-dated inventory rows directly via SQL and then reconcile derived caches through the app's `POST /api/spools/reevaluate` endpoint; spec-driven tests reset the whole inventory before and after each case, so a run is self-cleaning and safe to repeat. See the completed [002 Playwright Test Tool](../done/002-playwright-test-tool/) change request for the full design.
 
 ### CI integration
 
