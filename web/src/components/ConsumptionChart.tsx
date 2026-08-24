@@ -13,8 +13,8 @@ const GRID = 'var(--faint)'
 const INK = 'var(--fg)'
 
 // Nominal coordinate space; the SVG scales to 100% of the card width (no horizontal overflow).
-// PAD_T is a header band that holds the legend and the fixed per-day readout (which no longer
-// floats over the plot).
+// PAD_T is a header band that holds the legend — plain, or the enhanced one-line readout (values
+// plus date) while a day is highlighted.
 const W = 720
 const H = 344
 const PAD_L = 56
@@ -24,9 +24,13 @@ const PAD_B = 40
 const PLOT_W = W - PAD_L - PAD_R
 const PLOT_H = H - PAD_T - PAD_B
 
-// The per-day readout is pinned to a fixed header position (right of the legend) instead of
-// following the pointer — it only changes content as you hover/tap.
-const PANEL = { x: 300, y: 6, w: 214, h: 66 }
+// Fixed header slots for the legend line (006, post-approval user request): the two legend entries
+// never move when a day is highlighted — only their values and the date appear. The consumed entry
+// is fixed to the right of the longest possible total label ("Total stock: 99999.99 kg" ≈ 153 units
+// from x=74, measured in the e2e font context), and the date slot clears the longest possible
+// consumed label ("Consumed: 99999.99 kg" ≈ 151 units from x=259).
+const LEGEND_CONSUMED_X = 241
+const LEGEND_DATE_X = 424
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -44,6 +48,16 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 
 /** A kilogram value rendered without float noise and without a trailing ".00" (4 -> "4", 0.75 -> "0.75"). */
 const fmtKg = (v: number): string => String(Math.round(v * 100) / 100)
+
+// Per-value unit rule for the enhanced legend (spec Rule 1): whole grams below 1 000 g, kilograms
+// at 1 000 g and above rounded to two decimals HALF UP (a third decimal of exactly 5 rounds up:
+// 1015 g -> "1.02 kg", never "1.01 kg"), trailing zeros dropped (1000 g -> "1 kg", 1500 g -> "1.5 kg").
+// The rounding goes through tens of grams — Math.round(g / 10) / 100 — because for whole grams
+// g / 10 is representable exactly (an integer or integer + 0.5), so the half-up tie is exact.
+// The naive Math.round((g / 1000) * 100) / 100 must NOT be used: 1.015 is 1.01499… in binary and
+// that form renders 1015 g as "1.01 kg" (plan risk 1).
+const fmtGrams = (grams: number): string =>
+  grams < 1000 ? `${grams} g` : `${Math.round(grams / 10) / 100} kg`
 
 // Candidate "nice" step sizes, in kilograms (1, 2, 2.5, 5 times a power of ten).
 const NICE = [1, 2, 2.5, 5]
@@ -94,8 +108,8 @@ function niceTicks(maxKg: number, avoidCount?: number): number[] {
 /**
  * A hand-built inline-SVG two-line graph over the provided zero-filled day series: a total-stock
  * line on the left axis and a consumed line on the right axis, both in kilograms. Hover (pointer)
- * and touch (tap) highlight the nearest day and show its exact values in a fixed readout box.
- * The client only renders what the API provides.
+ * and touch (tap) highlight the nearest day and turn the legend into one enhanced line carrying
+ * that day's exact values and short date. The client only renders what the API provides.
  */
 export function ConsumptionChart({ series }: { series: DailySeries[] }) {
   const n = series.length
@@ -225,29 +239,26 @@ export function ConsumptionChart({ series }: { series: DailySeries[] }) {
         style={{ display: 'block', width: '100%', height: 'auto', aspectRatio: `${W} / ${H}`, fontFamily: 'inherit' }}
         onPointerLeave={() => setHover(null)}
       >
-        {/* Legend: exactly two entries, each swatch matching its line's color (AC-1). */}
+        {/* Legend: fixed two entries, each swatch matching its line's color, in fixed slots that
+            never move between the plain and enhanced states. While a day is hovered/tapped only
+            the values (appended to each label) and the short date appear (006: the fixed 3-row
+            readout box is removed). */}
         <g data-testid="legend-total">
           <rect x={PAD_L} y={12} width={12} height={12} rx={2} fill={TOTAL_COLOR} />
-          <text x={PAD_L + 18} y={22} fontSize={13} fontWeight={600} fill={INK}>{'Total stock'}</text>
+          <text x={PAD_L + 18} y={22} fontSize={13} fontWeight={600} fill={INK}>
+            {hovered ? `Total stock: ${fmtGrams(hovered.totalStockGrams)}` : 'Total stock'}
+          </text>
         </g>
         <g data-testid="legend-consumed">
-          <rect x={PAD_L + 150} y={12} width={12} height={12} rx={2} fill={CONSUMED_COLOR} />
-          <text x={PAD_L + 168} y={22} fontSize={13} fontWeight={600} fill={INK}>{'Consumed'}</text>
+          <rect x={LEGEND_CONSUMED_X} y={12} width={12} height={12} rx={2} fill={CONSUMED_COLOR} />
+          <text x={LEGEND_CONSUMED_X + 18} y={22} fontSize={13} fontWeight={600} fill={INK}>
+            {hovered ? `Consumed: ${fmtGrams(hovered.consumedGrams)}` : 'Consumed'}
+          </text>
         </g>
-
-        {/* Fixed per-day readout — pinned next to the legend (not floating). Shown only while a
-            day is hovered/tapped; content updates day by day. */}
         {hovered && (
-          <g data-testid="tooltip" transform={`translate(${PANEL.x}, ${PANEL.y})`}>
-            <rect width={PANEL.w} height={PANEL.h} rx={7} fill="var(--surface-glass)" stroke="var(--border-strong)" />
-            <text x={12} y={22} fontSize={13} fontWeight={700} fill={INK}>{formatMD(hovered.day)}</text>
-            <text x={12} y={42} fontSize={13} fill={TOTAL_COLOR}>
-              {'Total stock: '}{hovered.totalStockGrams}{' g'}
-            </text>
-            <text x={12} y={60} fontSize={13} fill={CONSUMED_COLOR}>
-              {'Consumed: '}{hovered.consumedGrams}{' g'}
-            </text>
-          </g>
+          <text data-testid="legend-date" x={LEGEND_DATE_X} y={22} fontSize={13} fill="var(--muted)">
+            {'— '}{formatMD(hovered.day)}
+          </text>
         )}
 
         {/* Frame: left/right edges and the shared baseline (the 0 gridline). */}
@@ -279,7 +290,7 @@ export function ConsumptionChart({ series }: { series: DailySeries[] }) {
           </>
         )}
 
-        {/* Hover / touch: vertical day highlight (the readout box stays in its fixed header spot). */}
+        {/* Hover / touch: vertical day highlight (the legend updates in place in the header). */}
         {hovered && (
           <line data-testid="hover-highlight" x1={x(hover!)} x2={x(hover!)} y1={PAD_T} y2={PAD_T + PLOT_H}
             stroke={GRID} strokeWidth={1.2} strokeDasharray="4 3" pointerEvents="none" />
