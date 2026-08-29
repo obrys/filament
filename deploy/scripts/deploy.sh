@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the API + web images locally, ship them to the FCOS server via SSH,
+# Build the API + web images locally, ship them to the server via SSH,
 # sync Quadlet units, and restart affected services.
 #
 # Usage:   ./deploy/scripts/deploy.sh user@host arm64|amd64

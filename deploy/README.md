@@ -1,22 +1,15 @@
-# Filament — Fedora CoreOS Deployment Guide
+# Filament — Deployment Guide
 
-This guide walks you through deploying Filament on a **freshly installed Fedora
-CoreOS (FCOS)** VM, managed entirely by **podman + systemd (Quadlet)**, and
-shipping updates from a **Fedora Kinoite** desktop.
-
-The final footprint stays **below 1 GB of RAM**.
-
-The Quadlet units and deployment script also work on Ubuntu with Podman. On an
-Ubuntu services VM, create the dedicated `filament` user with subordinate UID/GID
-ranges, enable systemd lingering for it, and ensure `rsync` and SSH access are
-available. The FCOS Ignition step is not needed in that setup.
+This guide walks you through deploying Filament on a **server VM running a
+modern Linux distro with systemd**, managed entirely by **podman + systemd
+(Quadlet)**, and shipping updates from a **desktop** machine.
 
 ---
 
 ## Table of contents
 
 1. [Minimum VM specs](#1-minimum-vm-specs)
-2. [Prepare the FCOS VM](#2-prepare-the-fcos-vm)
+2. [Prepare the server](#2-prepare-the-server)
 3. [Project layout for deployment](#3-project-layout-for-deployment)
 4. [How updates flow from desktop → server](#4-how-updates-flow-from-desktop--server)
 5. [First-time install on the server](#5-first-time-install-on-the-server)
@@ -28,97 +21,31 @@ available. The FCOS Ignition step is not needed in that setup.
 
 ## 1. Minimum VM specs
 
-Filament is engineered for low-RAM, low-power LAN servers.
+The very minimum for the whole stack is **1 GB of RAM**. The current
+production VM has **2 GB** to maintain a headroom.
 
-| Resource | Minimum    | Recommended | Notes                                          |
-|---------:|:----------:|:-----------:|:-----------------------------------------------|
-| **CPU**  | 1 vCPU     | 2 vCPU      | x86_64 or aarch64                              |
-| **RAM**  | **768 MB** | **1 GB**    | Tuning below keeps us under 850 MB at runtime  |
-| **Disk** | 10 GB      | 20 GB       | OS ~3 GB + images ~600 MB + DB room            |
-| **Net**  | LAN only   | LAN only    | No external exposure required                  |
+| Resource | Minimum | Notes                                          |
+|---------:|:-------:|:-----------------------------------------------|
+| **CPU**  | 1 vCPU  | x86_64 or aarch64                              |
+| **RAM**  | **1 GB**| Production runs on 2 GB for a headroom         |
+| **Disk** | 10 GB   | OS + images ~600 MB + DB room                  |
+| **Net**  | LAN only| No external exposure required                  |
 
-**Measured RAM at idle on a 1 GB VM (after 24 h, no load):**
-
-| Component                | RSS    |
-|--------------------------|-------:|
-| FCOS base + systemd      | ~220 MB|
-| MariaDB 11 (tuned)       | ~180 MB|
-| Filament API (.NET 10)   | ~120 MB|
-| nginx (web)              |  ~10 MB|
-| podman bookkeeping       |  ~40 MB|
-| **Total**                |~570 MB |
-
-Tuning that achieves this is included in the Quadlet files
-(`innodb_buffer_pool_size=32M`, `DOTNET_GCConserveMemory=9`, memory limits per
-unit).
+Per-container memory limits (`MemoryHigh`/`MemoryMax`) are set in the Quadlet
+units under [`quadlets/`](quadlets/) and keep total usage bounded.
 
 ---
 
-## 2. Prepare the FCOS VM
+## 2. Prepare the server
 
-### 2.1 Get FCOS
+On a freshly provisioned VM with a modern Linux distro with systemd:
 
-Download the latest **stable** FCOS image for your hypervisor from
-<https://fedoraproject.org/coreos/download>:
-
-- libvirt / KVM → `qemu` qcow2
-- VMware / Proxmox → `vmware` ova
-- Bare metal → `metal` raw
-
-### 2.2 Generate an Ignition config
-
-FCOS uses **Ignition** (run only on first boot) for declarative provisioning.
-We write it in Butane and convert it to Ignition JSON.
-
-The provided [`deploy/ignition/filament.bu`](ignition/filament.bu) sets up:
-
-- a `filament` user with your SSH key
-- locale, timezone, hostname
-- a `linger` so user systemd units run without an interactive session
-- the directory layout under `/var/home/filament/`
-- enables the SSH server (already default on FCOS)
-
-**On your Kinoite desktop:**
-
-```bash
-# Install butane once (it's already packaged for Fedora)
-sudo rpm-ostree install butane     # then reboot, OR:
-podman run --rm -i quay.io/coreos/butane:release \
-  < deploy/ignition/filament.bu > deploy/ignition/filament.ign
-```
-
-Edit `deploy/ignition/filament.bu` first to:
-
-1. Replace `ssh-ed25519 AAAAC3Nz... your-key` with the output of
-   `cat ~/.ssh/id_ed25519.pub`.
-2. Adjust `hostname`, `timezone`, and (optionally) the user name.
-
-### 2.3 Boot the VM with the Ignition config
-
-**libvirt example:**
-
-```bash
-coreos-installer download -p qemu -f qcow2.xz --decompress
-mv fedora-coreos-*-qemu.x86_64.qcow2 /var/lib/libvirt/images/filament.qcow2
-
-virt-install \
-  --name filament \
-  --vcpus 2 --memory 1024 \
-  --os-variant fedora-coreos-stable \
-  --import --disk /var/lib/libvirt/images/filament.qcow2 \
-  --network bridge=virbr0 \
-  --graphics none \
-  --qemu-commandline="-fw_cfg name=opt/com.coreos/config,file=$PWD/deploy/ignition/filament.ign"
-```
-
-**Proxmox:** upload the `.ign` to a snippet store, then set
-`--args "-fw_cfg name=opt/com.coreos/config,file=/var/lib/vz/snippets/filament.ign"`.
-
-After ~30 seconds you should be able to ssh in:
-
-```bash
-ssh filament@<vm-ip>
-```
+1. Install `podman` and `rsync` with the distro's package manager.
+2. Create a dedicated `filament` user with subordinate UID/GID ranges
+   (required for rootless podman), e.g. `sudo useradd -m -U -s /bin/bash filament`.
+3. Add your SSH public key for the `filament` user.
+4. Enable systemd lingering so per-user units run without an interactive
+   session: `sudo loginctl enable-linger filament`.
 
 ---
 
@@ -127,9 +54,6 @@ ssh filament@<vm-ip>
 ```
 deploy/
 ├── README.md                    # this file
-├── ignition/
-│   ├── filament.bu              # Butane source — edit this
-│   └── filament.ign             # generated; do not edit
 ├── quadlets/                    # systemd-managed podman units (Quadlet)
 │   ├── filament.network         # internal pod network
 │   ├── filament-db.volume       # persistent MariaDB volume
@@ -153,15 +77,15 @@ pattern — simple, secure (over SSH), no extra infra.
 
 ```
 ┌──────────────────────┐    1. podman build api & web
-│   Kinoite desktop    │    2. podman save → ssh → podman load
+│   Desktop (builder)  │    2. podman save → ssh → podman load
 │                      │ ─────────────────────────────────────┐
 │   git repo + .git    │    3. rsync quadlets to server       │
 └──────────────────────┘                                       ▼
-                                                ┌──────────────────────────┐
-                                                │   FCOS VM (filament)     │
-                                                │   podman + systemd       │
-                                                │   filament-{db,api,web}  │
-                                                └──────────────────────────┘
+                                                 ┌──────────────────────────┐
+                                                 │   Server VM (filament)   │
+                                                 │   podman + systemd       │
+                                                 │   filament-{db,api,web}  │
+                                                 └──────────────────────────┘
 ```
 
 [`deploy/scripts/deploy.sh`](scripts/deploy.sh) does all three steps.
@@ -170,7 +94,7 @@ pattern — simple, secure (over SSH), no extra infra.
 
 ## 5. First-time install on the server
 
-From your Kinoite desktop, in the repo root:
+From your desktop, in the repo root:
 
 ```bash
 # 1) Bootstrap: copy Quadlet units to the server
@@ -199,11 +123,11 @@ systemctl --user status filament-db filament-api filament-web
 curl -fsS http://localhost:18080/healthz   # → {"status":"ok"}
 ```
 
-Open in a browser: `http://<vm-ip>/`
+Open in a browser: `http://<vm-ip>:8081/`
 
 > **Why `systemctl --user`?** Quadlet files in `~/.config/containers/systemd/`
-> are rootless. This is the FCOS-recommended pattern for application workloads —
-> the kernel only ever runs containers as the `filament` user, never as root.
+> are rootless. The kernel only ever runs containers as the `filament` user,
+> never as root.
 
 ---
 
@@ -215,7 +139,7 @@ Open in a browser: `http://<vm-ip>/`
 ./deploy/scripts/deploy.sh filament@<vm-ip> amd64
 ```
 
-The second argument is the server architecture: use `amd64` for x86_64 FCOS
+The second argument is the server architecture: use `amd64` for an x86_64 host
 and `arm64` for an ARM64 host such as a Raspberry Pi 5. The local container
 engine must be able to build the selected platform; cross-architecture builds
 may require binfmt/QEMU emulation.
@@ -246,10 +170,11 @@ systemctl --user stop  filament-web filament-api filament-db
 systemctl --user start filament-db filament-api filament-web
 ```
 
-### Auto-update FCOS itself
+### OS updates
 
-FCOS auto-applies OS updates via Zincati. Your containers restart cleanly
-because they're declared in systemd units — nothing else to configure.
+Update the operating system with the distro's normal mechanism. The containers
+are declared in systemd units, so they come back cleanly after a reboot —
+nothing else to configure.
 
 ---
 
@@ -279,7 +204,7 @@ systemctl --user start filament-db filament-api
 | Symptom                                          | Fix |
 |--------------------------------------------------|-----|
 | `rootlessport cannot expose privileged port 80`  | Rootless podman can't bind to ports <1024. Use a high port (we use **8081**) and front it with a reverse proxy, or run `sudo sysctl net.ipv4.ip_unprivileged_port_start=80`. |
-| `systemctl --user` says "Failed to connect to bus" | Linger isn't enabled. `sudo loginctl enable-linger filament` (Ignition already does this). |
+| `systemctl --user` says "Failed to connect to bus" | Linger isn't enabled. `sudo loginctl enable-linger filament`. |
 | API container restart-loops with DB connection errors | DB hasn't finished initializing. The unit has `Restart=on-failure` and will eventually succeed; or `systemctl --user restart filament-api` once `filament-db` is `active`. |
 | `Error: short-name "mariadb:11" did not resolve` | Edit `/etc/containers/registries.conf.d/` or use the fully-qualified `docker.io/library/mariadb:11` (already used in our Quadlets). |
 | OOM kills after a few hours                      | Confirm `MemoryMax=` in `filament-db.container`. If still tight, drop `innodb_buffer_pool_size` from `32M` to `16M`. |

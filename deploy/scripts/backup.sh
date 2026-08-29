@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Backup the filament-db podman volume to stdout as a gzipped tarball.
-# Meant to be run on the FCOS server, typically via:
+# Meant to be run on the server, typically via:
 #   ssh filament@host 'bash -s' < deploy/scripts/backup.sh > filament-$(date +%F).tar.gz
 set -euo pipefail
 

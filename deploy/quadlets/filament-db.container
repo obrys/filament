@@ -15,8 +15,8 @@ Environment=MARIADB_USER=filament
 Environment=MARIADB_PASSWORD=filament
 Environment=MARIADB_RANDOM_ROOT_PASSWORD=yes
 
-# Memory tuning for sub-1GB systems. innodb_buffer_pool_size of 32 MiB is the
-# main lever; drop to 16M if your VM has only 768 MB total RAM.
+# Low-RAM tuning. innodb_buffer_pool_size of 32 MiB is the main lever; drop it
+# to 16M if the VM is RAM-constrained.
 Exec=mariadbd \
      --innodb-buffer-pool-size=32M \
      --innodb-log-file-size=16M \

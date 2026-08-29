@@ -4,10 +4,10 @@ Self-hosted filament & spool management for small 3D-print farms.
 
 ## Quick start (everything in containers)
 
-Works with either Docker or Podman:
+Works with either Podman (or Docker):
 
 ```bash
-docker compose up --build     # or: podman compose up --build
+podman compose up --build     # or: docker compose up --build
 ```
 
 Then open:
@@ -18,7 +18,7 @@ Then open:
 
 ```bash
 # 1) Start only the database
-podman compose up -d db
+podman compose up db
 
 # 2) Backend (auto-runs migrations on startup)
 dotnet run --project src/Filament.Api
@@ -68,8 +68,8 @@ See `Filament.Core.Identifiers.IdentifierGenerator`.
 ## Production deployment
 
 See [`deploy/README.md`](deploy/README.md) for a step-by-step guide to deploy
-on Fedora CoreOS with podman + systemd (Quadlet), including Ignition config,
-desktop-to-server deploy script, and a runtime footprint under 1 GB RAM.
+to a modern Linux distro with systemd, using podman + systemd (Quadlet) and a
+desktop-to-server deploy script.
 
 ## Documentation
 
