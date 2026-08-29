@@ -12,6 +12,13 @@ namespace Filament.Infrastructure.Tests;
 /// to tests. Tables are cleared between tests via <see cref="ResetAsync"/>. The container is
 /// stopped and removed on disposal. This gives real-SQL evidence for spool-list ordering against
 /// the same provider used in production (Pomelo/MySQL → MariaDB).
+///
+/// Readiness is detected by retrying the real migration instead of the container runtime's
+/// HEALTHCHECK status: podman builds compiled without the systemd tag (as shipped in recent
+/// GitHub-hosted Ubuntu 22.04/24.04 runner images, actions/runner-images#14569) silently never
+/// run health checks, leaving the status stuck at "starting" forever. The MariaDB image creates
+/// the database and user while running with --skip-networking, so the port only opens once the
+/// server is fully initialized — a failing migration attempt is always a not-ready state.
 /// </summary>
 public sealed class MariaDbFixture : IAsyncLifetime
 {
@@ -53,14 +60,11 @@ public sealed class MariaDbFixture : IAsyncLifetime
             $"Server=127.0.0.1;Port={HostPort};Database={DbName};User={DbUser};Password={DbPass};" +
             "AllowPublicKeyRetrieval=True";
 
-        await WaitUntilHealthyAsync(TimeSpan.FromSeconds(120));
-
         // Apply the real migrations so the schema — including the new LastUsedAt column and its
-        // backfill SQL — is exercised against real MariaDB.
-        using (var db = CreateContext())
-        {
-            await db.Database.MigrateAsync();
-        }
+        // backfill SQL — is exercised against real MariaDB. Each failed attempt just means the
+        // server is not accepting connections yet (or the connection timed out mid-startup);
+        // migrations run inside transactions, so retrying is safe.
+        await MigrateUntilReadyAsync(TimeSpan.FromSeconds(120));
     }
 
     public Task DisposeAsync()
@@ -86,16 +90,26 @@ public sealed class MariaDbFixture : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync("DELETE FROM filament_types");
     }
 
-    private async Task WaitUntilHealthyAsync(TimeSpan timeout)
+    private async Task MigrateUntilReadyAsync(TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
+        Exception? last = null;
         while (DateTime.UtcNow < deadline)
         {
-            var (out_, _, _) = _cli!.Run("inspect", "--format", "{{.State.Health.Status}}", ContainerName);
-            if (out_.Trim() == "healthy") return;
-            await Task.Delay(2000);
+            try
+            {
+                using var db = CreateContext();
+                await db.Database.MigrateAsync();
+                return;
+            }
+            catch (Exception e)
+            {
+                last = e;
+                await Task.Delay(2000);
+            }
         }
-        throw new TimeoutException($"MariaDB container did not become healthy within {timeout.TotalSeconds}s.");
+        throw new TimeoutException(
+            $"MariaDB did not accept migrations within {timeout.TotalSeconds}s. Last error: {last}");
     }
 }
 

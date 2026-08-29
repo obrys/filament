@@ -84,21 +84,30 @@ echo "Starting DB container..."
   --health-retries=30 \
   mariadb:11 >/dev/null
 
-# --- Wait for DB health ------------------------------------------------------
-echo "Waiting for DB to be healthy..."
+# --- Wait for DB readiness ---------------------------------------------------
+# Wait on the TCP port instead of the container runtime's HEALTHCHECK status:
+# podman builds compiled without the systemd tag (as shipped in recent
+# GitHub-hosted Ubuntu 22.04/24.04 runner images, actions/runner-images#14569)
+# silently never run health checks, leaving the status stuck at "starting".
+# The MariaDB image creates the database and user while running with
+# --skip-networking, so the port only opens once the server is fully ready.
+echo "Waiting for DB to accept connections on port $DB_PORT..."
 elapsed=0
+db_up=0
 while [ "$elapsed" -lt "$READY_TIMEOUT" ]; do
-  status="$("${E2E_CLI[@]}" inspect --format '{{.State.Health.Status}}' "$DB" 2>/dev/null || echo "unknown")"
-  if [ "$status" = "healthy" ]; then break; fi
+  if (exec 3<>"/dev/tcp/127.0.0.1/$DB_PORT") 2>/dev/null; then
+    db_up=1
+    break
+  fi
   sleep 3
   elapsed=$((elapsed + 3))
 done
-if [ "$status" != "healthy" ]; then
-  echo "ERROR: DB did not become healthy within ${READY_TIMEOUT}s (last status: $status)." >&2
+if [ "$db_up" -ne 1 ]; then
+  echo "ERROR: DB did not accept connections within ${READY_TIMEOUT}s." >&2
   echo "Inspect with: ${E2E_CLI[*]} logs $DB" >&2
   exit 1
 fi
-echo "DB is healthy."
+echo "DB is ready."
 
 # --- Start API ---------------------------------------------------------------
 echo "Starting API container..."
