@@ -29,7 +29,7 @@ on the proxy host (it should, since both are on the LAN DNS).
 - HSTS is enabled (1 year). Comment that header out while testing if you're
   not yet ready to commit.
 
-## Firewall on the FCOS VM (recommended)
+## Firewall on the server (recommended)
 
 Restrict the application port so it's only reachable from the proxy:
 
@@ -44,7 +44,7 @@ sudo firewall-cmd --reload
 
 | Symptom                              | Likely cause / fix                                  |
 |--------------------------------------|-----------------------------------------------------|
-| `502 Bad Gateway`                    | FCOS VM unreachable or web container down. Check `systemctl --user status filament-web` on the VM. |
+| `502 Bad Gateway`                    | Server VM unreachable or web container down. Check `systemctl --user status filament-web` on the VM. |
 | WebSocket connects but disconnects every minute | A different proxy (Cloudflare, etc.) is in front; raise its read timeout. |
 | `duplicate "map" directive`          | The `map` block in this file conflicts with an existing one elsewhere — remove from this file. |
 | `unknown directive "http2"`          | Your nginx is older than 1.25. Replace `listen 443 ssl;` + `http2 on;` with `listen 443 ssl http2;`. |

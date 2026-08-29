@@ -1,6 +1,6 @@
 # Architecture
 
-Filament uses a React single-page application, a three-layer .NET backend, and MariaDB. The supported production topology is a rootless Podman Quadlet stack on Fedora CoreOS.
+Filament uses a React single-page application, a three-layer .NET backend, and MariaDB. The supported production topology is a rootless Podman Quadlet stack on a modern Linux distro with systemd.
 
 ```mermaid
 flowchart LR

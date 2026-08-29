@@ -4,7 +4,7 @@ namespace Filament.Infrastructure.Tests;
 
 /// <summary>
 /// Detects the container CLI the same way <c>scripts/e2e-cli.sh</c> does, so the Infrastructure
-/// tests can spin up a disposable MariaDB container from inside a Fedora Silverblue toolbox
+/// tests can spin up a disposable MariaDB container from inside an immutable-desktop toolbox
 /// (<c>flatpak-spawn --host podman</c>) or a plain <c>podman</c>/<c>docker</c> environment.
 /// </summary>
 internal sealed class ContainerCli
@@ -31,7 +31,7 @@ internal sealed class ContainerCli
         {
             throw new InvalidOperationException(
                 "No supported container CLI found. Looked for: flatpak-spawn (toolbox), podman, docker. " +
-                "On Fedora Silverblue, run inside a toolbox where flatpak-spawn can reach host podman.");
+                "On an immutable desktop, run inside a toolbox where flatpak-spawn can reach host podman.");
         }
         return new ContainerCli(prefix);
     }

@@ -2,22 +2,16 @@
 
 ## Supported deployment
 
-This is the supported production path: Fedora CoreOS (FCOS), rootless Podman, and systemd Quadlets under the `filament` service account. The files in `deploy/quadlets/` define one named network, persistent MariaDB volume, database container, API container, and web container. Docker Compose exists for local all-container development, not as the documented production deployment.
+This is the supported production path: a modern Linux distro with systemd, rootless Podman, and systemd Quadlets under the `filament` service account. The files in `deploy/quadlets/` define one named network, persistent MariaDB volume, database container, API container, and web container. Docker Compose exists for local all-container development, not as the documented production deployment.
 
-Minimum target: one x86_64 or aarch64 vCPU, 768 MB RAM, and 10 GB disk. The repository recommends 2 vCPUs, 1 GB RAM, and 20 GB disk. Container tuning limits MariaDB to 420 MB, API to 512 MB, and web to 32 MB; measured idle use in the existing deployment guide is roughly 570 MB total.
+Minimum target: one x86_64 or aarch64 vCPU, 1 GB RAM, and 10 GB disk. The current production VM provides 2 GB RAM for a headroom. Container tuning limits MariaDB to 420 MB, API to 512 MB, and web to 32 MB.
 
 ## Before installation
 
-1. Create an FCOS VM with LAN connectivity and SSH access. Do not expose this unauthenticated application to the public internet.
-2. Edit `deploy/ignition/filament.bu` before first boot. Replace the included SSH keys and password hashes, choose the hostname/timezone, and use the account name consistently if changing `filament`.
-3. Render Butane to Ignition, for example:
-
-```bash
-podman run --rm -i quay.io/coreos/butane:release \
-  < deploy/ignition/filament.bu > deploy/ignition/filament.ign
-```
-
-4. Boot the VM with the rendered Ignition. It creates the Quadlet directory and enables systemd lingering, allowing rootless user services to start at boot without a login session.
+1. Prepare a server VM with a modern Linux distro with systemd, LAN connectivity, and SSH access. Do not expose this unauthenticated application to the public internet.
+2. Install Podman and rsync with the distro's package manager.
+3. Create a dedicated `filament` user with subordinate UID/GID ranges, add your SSH public key, and use the account name consistently if changing `filament`.
+4. Enable systemd lingering (`sudo loginctl enable-linger filament`) so rootless user services start at boot without a login session.
 
 The checked-in Quadlets currently contain the MariaDB application password and API connection string. Change these together before deployment if the host is not strictly disposable/trusted; credentials committed in source control are not a secret-management solution.
 
@@ -136,7 +130,7 @@ The repository includes a Playwright-based end-to-end test framework under `e2e/
 npm --prefix e2e run e2e
 ```
 
-This invokes `scripts/run-e2e.sh`, which builds the API and web images from the existing Dockerfiles, starts a dedicated `filament-e2e` network with a disposable MariaDB container (no persistent volume), waits for `/healthz`, runs the Chromium Playwright suite, and tears everything down on exit. The runner auto-detects the container CLI: inside a Fedora Silverblue toolbox it uses `flatpak-spawn --host podman`; otherwise it prefers `podman`, falls back to `docker`, and fails clearly if neither is available.
+This invokes `scripts/run-e2e.sh`, which builds the API and web images from the existing Dockerfiles, starts a dedicated `filament-e2e` network with a disposable MariaDB container (no persistent volume), waits for `/healthz`, runs the Chromium Playwright suite, and tears everything down on exit. The runner auto-detects the container CLI: inside an immutable-desktop toolbox it uses `flatpak-spawn --host podman`; otherwise it prefers `podman`, falls back to `docker`, and fails clearly if neither is available.
 
 Every run retains Playwright evidence in `e2e/test-results/`: a final screenshot per test, continuous video, and a trace archive. Open a trace with `npx playwright show-trace e2e/test-results/<test>/trace.zip`; the Trace Viewer provides action-by-action snapshots and the action timeline. The video is the best source for continuous visual feedback between actions.
 

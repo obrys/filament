@@ -12,7 +12,7 @@ detect_cli() {
   else
     echo "ERROR: No supported container CLI found." >&2
     echo "Looked for: flatpak-spawn (toolbox), podman, docker." >&2
-    echo "On Fedora Silverblue, run this inside a toolbox where flatpak-spawn can reach host podman." >&2
+    echo "On an immutable desktop, run this inside a toolbox where flatpak-spawn can reach host podman." >&2
     exit 1
   fi
   echo "Using container CLI: ${E2E_CLI[*]}"

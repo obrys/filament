@@ -8,7 +8,7 @@ This directory describes the Filament application as it currently exists. It is 
 - [Domain model and rules](domain-rules.md): inventory concepts, identifiers, weights, lifecycle, history, and filtering.
 - [Interfaces](interfaces.md): web routes, HTTP API, labels, real-time notifications, and operational endpoints.
 - [Architecture](architecture.md): implementation boundaries, data ownership, deployment topology, and consistency behavior.
-- [Operations](operations.md): supported Fedora CoreOS/Podman Quadlet installation, updates, administration, and recovery.
+- [Operations](operations.md): supported Podman Quadlet installation, updates, administration, and recovery.
 
 ## Change Requests
 
