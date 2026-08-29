@@ -4,14 +4,15 @@ Self-hosted filament & spool management for small 3D-print farms.
 
 ## Quick start (everything in containers)
 
+Works with either Docker or Podman:
+
 ```bash
-docker compose up --build
+docker compose up --build     # or: podman compose up --build
 ```
 
 Then open:
-- Web UI:  http://localhost:5173
-- API:     http://localhost:8080/healthz
-- OpenAPI: http://localhost:8080/openapi/v1.json
+- Web UI: http://localhost:5173
+- API:    http://localhost:8080/healthz
 
 ## Local development
 
@@ -26,8 +27,10 @@ dotnet run --project src/Filament.Api
 cd web && npm install && npm run dev
 ```
 
-> The dev frontend proxy expects the API on `http://localhost:5000`.
-> Adjust `web/vite.config.ts` if your `launchSettings.json` uses a different port.
+> The dev frontend proxies `/api` and `/ws` to `http://localhost:5113`, matching
+> the default `http` profile in `src/Filament.Api/Properties/launchSettings.json`.
+> Adjust `web/vite.config.ts` if you run the backend on a different port.
+> OpenAPI docs are only served in Development: http://localhost:5113/openapi/v1.json
 
 ## Tests
 
