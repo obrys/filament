@@ -1,6 +1,6 @@
 ---
 name: document-change
-description: Use when documenting a completed doc/todo change in doc/spec and archiving its request under doc/done after implementation verification passes.
+description: Use when documenting a completed doc/todo change in doc/spec, archiving its request under doc/done after implementation verification passes, and proposing the commit message for the final squash commit.
 ---
 
 # Document And Archive Change Request
@@ -22,7 +22,8 @@ Use this skill only after a spec-driven change request has been implemented and 
 3. Every request link from `doc/spec/` must target `doc/done/<id>-<title>/`, never `doc/todo/`. Create the link as though the move has already happened.
 4. Check links affected by the move, then move the complete directory with `git mv doc/todo/<id>-<title> doc/done/<id>-<title>`.
 5. Update documentation indexes if they list requests.
-6. Report documentation files changed, the archived path, and any links checked.
+6. Propose a commit message for the final squash commit of the implemented change request. Base it on the approved specification, implementation notes, and the actual branch diff. Follow the existing commit message style from `git log`. Mark it clearly as a proposal; never commit it.
+7. Report documentation files changed, the archived path, any links checked, and the proposed commit message.
 
 ## Documentation standards
 
