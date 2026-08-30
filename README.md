@@ -2,6 +2,11 @@
 
 Self-hosted filament & spool management for small 3D-print farms.
 
+> **Small-deployment only:** Filament is designed for small, home-like
+> deployments (a personal or workshop print farm). It intentionally ships
+> without authentication or authorization, so keep it to a trusted network.
+> Do not expose it to untrusted or public networks.
+
 ## Quick start (everything in containers)
 
 Works with either Podman (or Docker):
