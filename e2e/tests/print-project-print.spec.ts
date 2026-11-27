@@ -183,6 +183,15 @@ test('AC-9: same spool in two slots consumes the sum of both slots', async ({ pa
   expect(await spoolById(page, 'SA').then(s => s.remainingGrams)).toBe(850)
   expect(await spoolById(page, 'SD').then(s => s.remainingGrams)).toBe(1000)
   expect(await printCount(page)).toBe(1)
+
+  // One consumption per slot (not a combined one): two lines on the project print, two
+  // project-linked rows in SA's history.
+  const printRow = page.locator('.card--flush tbody tr').first()
+  await expect(printRow.getByRole('link', { name: 'SA' })).toHaveCount(2)
+  await expect(printRow).toContainText('−100 g')
+  await expect(printRow).toContainText('−50 g')
+  await page.goto('/spools/SA')
+  await expect(page.locator('tr.event--project')).toHaveCount(2)
 })
 
 // AC-10a — an unfilled slot or a 0 g slot blocks confirmation with a visible error; nothing is
@@ -264,6 +273,10 @@ test('AC-11: valid print consumes both spools, links history rows, sealed spool 
   await expect(linked.getByRole('link', { name: 'Benchy' })).toBeVisible()
   await expect(linked.getByRole('button', { name: 'Undo', exact: true })).toHaveCount(0)
   await expect(linked.getByRole('button', { name: 'Redo', exact: true })).toHaveCount(0)
+  // The opening is a separate, ordinary Open event (not project-linked) that can be undone on its own.
+  const openedRow = page.locator('tbody tr').filter({ has: page.locator('.ev--opened') })
+  await expect(openedRow).toHaveCount(1)
+  await expect(openedRow).not.toHaveClass(/event--project/)
 
   await page.goto('/spools/SD')
   await expect(page.locator('tr.event--project')).toHaveCount(1)
@@ -325,6 +338,50 @@ test('AC-12: undo/redo of a project print; a rejected redo keeps the print undon
   await expect(rowAfter).toHaveClass(/event-disabled/)
   expect((await spoolById(page, 'SA')).remainingGrams).toBe(1000)
   expect((await spoolById(page, 'SD')).remainingGrams).toBe(1000)
+})
+
+// AC-12 (sealed spool) — a print that opened a sealed spool logs the opening as its own spool
+// event: undoing the print leaves the spool open, redo works, and the opening can be undone on the
+// spool page on its own (which then makes a redo fail with the lifecycle guard's error).
+test('AC-12: the opening of a sealed spool is its own event; undo keeps it, redo works', async ({ page }) => {
+  await seedFixture()
+  await page.goto(`/print-projects/${PROJECT}/print`)
+
+  await pickFromSlot(page, 0, 'SB') // sealed
+  await pickFromSlot(page, 1, 'SD')
+  await page.getByTestId('confirm-print').click()
+  await expect(page).toHaveURL(new RegExp(`/print-projects/${PROJECT}\\?highlight=`))
+  expect((await spoolById(page, 'SB')).status).toBe('Open')
+
+  const printRowEl = () => page.locator('.card--flush tbody tr').first()
+  await printRowEl().getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(printRowEl()).toHaveClass(/event-disabled/)
+  // Undoing the print restores the grams but does not seal the spool again.
+  const afterUndo = await spoolWhen(page, 'SB', s => s.remainingGrams === 1000)
+  expect(afterUndo.status).toBe('Open')
+
+  // Redo works.
+  await printRowEl().getByRole('button', { name: 'Redo', exact: true }).click()
+  await expect(printRowEl()).not.toHaveClass(/event-disabled/)
+  expect((await spoolWhen(page, 'SB', s => s.remainingGrams === 900)).status).toBe('Open')
+
+  // Undo the print again, then undo the opening on the spool page: the spool is sealed again and
+  // a redo is rejected, leaving the print undone.
+  await printRowEl().getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(printRowEl()).toHaveClass(/event-disabled/)
+  await page.goto('/spools/SB')
+  await page.locator('tbody tr').filter({ has: page.locator('.ev--opened') })
+    .getByRole('button', { name: 'Undo', exact: true }).click()
+  await spoolWhen(page, 'SB', s => s.status === 'Sealed')
+
+  await page.goto(`/print-projects/${PROJECT}`)
+  const dialogPromise = page.waitForEvent('dialog')
+  await printRowEl().getByRole('button', { name: 'Redo', exact: true }).click()
+  const dialog = await dialogPromise
+  dialog.accept()
+  expect(dialog.message()).toContain('Open the spool')
+  await expect(printRowEl()).toHaveClass(/event-disabled/)
+  expect((await spoolById(page, 'SB')).remainingGrams).toBe(1000)
 })
 
 // AC-13 — click-through both ways with row highlighting: spool history -> project detail

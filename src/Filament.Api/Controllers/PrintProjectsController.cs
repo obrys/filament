@@ -51,6 +51,8 @@ public sealed class PrintProjectsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<PrintProjectDto>> Create([FromBody] CreatePrintProjectDto dto, CancellationToken ct)
     {
+        var shapeError = ValidateShape(dto);
+        if (shapeError is not null) return shapeError;
         var types = ToDefinition(dto);
         var guardError = Guard(dto, types);
         if (guardError is not null) return guardError;
@@ -76,6 +78,8 @@ public sealed class PrintProjectsController : ControllerBase
     {
         var existing = await _projects.GetAsync(id, ct);
         if (existing is null) return NotFound();
+        var shapeError = ValidateShape(dto);
+        if (shapeError is not null) return shapeError;
         var types = ToDefinition(dto);
         var guardError = Guard(dto, types, existing);
         if (guardError is not null) return guardError;
@@ -143,9 +147,11 @@ public sealed class PrintProjectsController : ControllerBase
     {
         var p = await _projects.GetAsync(id, ct);
         if (p is null) return NotFound();
+        if (dto.Spools is null || dto.Spools.Any(s => s is null))
+            return BadRequest(new { error = "The print needs a spool selection with a spool and grams for every filament type." });
         try
         {
-            var selection = (dto.Spools ?? [])
+            var selection = dto.Spools
                 .Select(s => new PrintSelection(s.SpoolId, s.Grams))
                 .ToList();
             var print = await _projects.PrintAsync(id, selection, ct);
@@ -186,6 +192,12 @@ public sealed class PrintProjectsController : ControllerBase
     }
 
     // ----- helpers -----
+
+    /// <summary>Rejects a body with missing type lines (JSON <c>null</c> entries) before they are dereferenced.</summary>
+    private static BadRequestObjectResult? ValidateShape(CreatePrintProjectDto dto) =>
+        dto.Types is null || dto.Types.Any(t => t is null)
+            ? new BadRequestObjectResult(new { error = "A print project needs at least one valid filament type line." })
+            : null;
 
     private static List<PrintProjectType> ToDefinition(CreatePrintProjectDto dto) =>
         (dto.Types ?? [])

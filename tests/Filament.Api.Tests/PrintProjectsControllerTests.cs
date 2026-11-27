@@ -83,6 +83,8 @@ public sealed class FakePrintProjectStore : IPrintProjectRepository
         Rerun(spool.Id);
     }
 
+    public void Reevaluate(string spoolId) => Rerun(spoolId);
+
     public void AddEvent(string spoolId, SpoolEvent ev)
     {
         _events[spoolId].Add(ev);
@@ -172,16 +174,18 @@ public sealed class FakePrintProjectStore : IPrintProjectRepository
     {
         var project = Project(projectId)
             ?? throw new InvalidOperationException($"PrintProject '{projectId}' not found.");
+        PrintProjectRules.ValidateSelection(project, selection);
         var contexts = selection.Select(s => s.SpoolId).Distinct()
             .Select(id => new SpoolWithEvents(Spool(id), _events[id]))
             .ToList();
         var occurredAt = DateTimeOffset.UtcNow;
-        var plans = PrintProjectRules.PlanPrint(project, selection, contexts, occurredAt);
+        var plan = PrintProjectRules.PlanPrint(project, selection, contexts, occurredAt);
 
         var print = new ProjectPrint { Id = IdentifierGenerator.NewProjectPrintId(), ProjectId = projectId, OccurredAt = occurredAt };
-        foreach (var plan in plans)
+        // Open events are independent spool events; Print events are linked to the project print.
+        foreach (var template in plan.OpenEvents.Concat(plan.PrintEvents))
         {
-            var template = plan.EventToAdd!;
+            var linked = template.Kind == SpoolEventKind.Print;
             var ev = new SpoolEvent
             {
                 Id = NextEventId(),
@@ -191,11 +195,11 @@ public sealed class FakePrintProjectStore : IPrintProjectRepository
                 ProjectName = template.ProjectName,
                 ProjectUrl = template.ProjectUrl,
                 Notes = template.Notes,
-                ProjectPrintId = print.Id,
+                ProjectPrintId = linked ? print.Id : null,
                 OccurredAt = template.OccurredAt,
             };
             _events[ev.SpoolId].Add(ev);
-            print.Events.Add(ev);
+            if (linked) print.Events.Add(ev);
             Rerun(ev.SpoolId);
         }
         project.Prints.Add(print);
@@ -514,11 +518,17 @@ public class PrintProjectsControllerTests
         Assert.Equal(50, s2Event.Grams);
 
         Assert.Equal(900, store.Spool("S1").RemainingGrams);
-        // S2 was sealed: the print consumed 50 g and opened it at the print's timestamp.
+        // S2 was sealed: the print consumed 50 g and opened it at the print's timestamp through a
+        // separate, independent Open event (not linked to the project print).
         var s2 = store.Spool("S2");
         Assert.Equal(950, s2.RemainingGrams);
         Assert.Equal(SpoolStatus.Open, s2.Status);
         Assert.Equal(print.OccurredAt, s2.OpenedAt);
+        var opened = Assert.Single(store.Events("S2"), e => e.Kind == SpoolEventKind.Opened);
+        Assert.Null(opened.ProjectPrintId);
+        Assert.Equal(print.OccurredAt, opened.OccurredAt);
+        // The already-open S1 gets no extra Open event.
+        Assert.Single(store.Events("S1"), e => e.Kind == SpoolEventKind.Opened);
 
         var s2PrintEvent = store.Events("S2").First(e => e.ProjectPrintId == print.Id);
         Assert.Equal("Benchy", s2PrintEvent.ProjectName);
@@ -575,17 +585,15 @@ public class PrintProjectsControllerTests
         Assert.Equal(1000, store.Spool("S1").RemainingGrams);
         var s2 = store.Spool("S2");
         Assert.Equal(1000, s2.RemainingGrams);
-        Assert.Equal(SpoolStatus.Sealed, s2.Status); // its only opening was the (now undone) print
+        // The opening is its own spool event: undoing the print does not seal the spool again.
+        Assert.Equal(SpoolStatus.Open, s2.Status);
         Assert.True(store.Events("S1").All(e => e.ProjectPrintId != print.Id || e.IsDisabled));
     }
 
     [Fact]
-    public async Task Redo_AfterUndo_ReappliesConsumption()
+    public async Task Redo_AfterUndo_ReappliesConsumption_EvenOnAutoOpenedSpool()
     {
         var (controller, store, _) = Create();
-        // Open S2 with its own Open event so it stays open after the undo and the redo
-        // (re-enabling a print on a sealed spool is rejected by the lifecycle guard).
-        store.AddEvent("S2", new SpoolEvent { Id = 4, SpoolId = "S2", Kind = SpoolEventKind.Opened, OccurredAt = T0 });
         var print = await PrintAsync(controller, "P1", ("S1", 100), ("S2", 50));
         await controller.Undo("P1", print.Id, CancellationToken.None);
 
@@ -595,15 +603,15 @@ public class PrintProjectsControllerTests
         var s2 = store.Spool("S2");
         Assert.Equal(950, s2.RemainingGrams);
         Assert.Equal(SpoolStatus.Open, s2.Status);
-        Assert.Equal(T0, s2.OpenedAt);
+        Assert.Equal(print.OccurredAt, s2.OpenedAt);
     }
 
     [Fact]
-    public async Task Redo_AutoOpenedSpoolSealedAgain_Rejected400AndStaysUndone()
+    public async Task Redo_AfterTheOpeningWasUndone_Rejected400AndStaysUndone()
     {
-        // The project prints only the sealed S2 (backed by a selection covering both types):
-        // undoing it returns S2 to sealed, so re-enabling the print is rejected by the
-        // "Open the spool before re-enabling prints" lifecycle guard.
+        // The print opened sealed S2 through its own Open event. After the print is undone the user
+        // may undo that opening on the spool page; re-enabling the print is then rejected by the
+        // "Open the spool before re-enabling prints" lifecycle guard and nothing changes.
         var (controller, store, _) = Create();
         store.AddProject(new PrintProject
         {
@@ -615,17 +623,91 @@ public class PrintProjectsControllerTests
         var print = await PrintAsync(controller, "P2", ("S2", 50));
         Assert.Equal(SpoolStatus.Open, store.Spool("S2").Status);
         await controller.Undo("P2", print.Id, CancellationToken.None);
+
+        store.Events("S2").Single(e => e.Kind == SpoolEventKind.Opened).IsDisabled = true;
+        store.Reevaluate("S2");
         Assert.Equal(SpoolStatus.Sealed, store.Spool("S2").Status);
 
         var result = await controller.Redo("P2", print.Id, CancellationToken.None);
         var bad = Assert.IsType<BadRequestObjectResult>(Unwrap(result));
         Assert.Contains("Open the spool", Error(bad));
 
-        // Nothing changed: the print stays undone and the spool stays sealed and full.
         Assert.True(store.Project("P2")!.Prints[0].IsDisabled);
         var s2 = store.Spool("S2");
         Assert.Equal(1000, s2.RemainingGrams);
         Assert.Equal(SpoolStatus.Sealed, s2.Status);
+    }
+
+    [Fact]
+    public async Task Print_SameSpoolInTwoSlots_CreatesOneEventPerSlot()
+    {
+        var (controller, store, _) = Create();
+
+        var print = await PrintAsync(controller, "P1", ("S1", 100), ("S1", 50));
+
+        Assert.Equal(2, print.Events.Count);
+        Assert.Equal([100, 50], print.Events.Select(e => e.Grams).OrderByDescending(g => g));
+        Assert.Equal(2, store.Events("S1").Count(e => e.ProjectPrintId == print.Id));
+        Assert.Equal(850, store.Spool("S1").RemainingGrams);
+    }
+
+    [Fact]
+    public async Task Print_SameSpoolInTwoSlots_SummedOverBalance_BadRequestAndChangesNothing()
+    {
+        var (controller, store, _) = Create();
+        var result = await controller.Print("P1", new CreateProjectPrintDto(
+            [new PrintSelectionDto("S1", 600), new PrintSelectionDto("S1", 500)]), CancellationToken.None);
+        var bad = Assert.IsType<BadRequestObjectResult>(Unwrap(result));
+        Assert.Contains("remaining", Error(bad));
+        Assert.Equal(1000, store.Spool("S1").RemainingGrams);
+        Assert.Empty(store.Project("P1")!.Prints);
+    }
+
+    [Fact]
+    public async Task Print_NullSelectionOrNullSlot_BadRequest()
+    {
+        var (controller, store, _) = Create();
+
+        var noSpools = await controller.Print("P1", new CreateProjectPrintDto(null!), CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(Unwrap(noSpools));
+
+        var nullSlot = await controller.Print("P1", new CreateProjectPrintDto(
+            [new PrintSelectionDto("S1", 100), null!]), CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(Unwrap(nullSlot));
+
+        var nullSpoolId = await controller.Print("P1", new CreateProjectPrintDto(
+            [new PrintSelectionDto(null!, 100), new PrintSelectionDto("S2", 50)]), CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(Unwrap(nullSpoolId));
+
+        Assert.Empty(store.Project("P1")!.Prints);
+        Assert.Equal(1000, store.Spool("S1").RemainingGrams);
+    }
+
+    [Fact]
+    public async Task Create_NullTypesOrNullTypeLine_BadRequest()
+    {
+        var (controller, store, _) = Create();
+        var before = store.Projects.Count;
+
+        var noTypes = await controller.Create(new CreatePrintProjectDto("X", null, null, null!), CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(Unwrap(noTypes));
+
+        var nullLine = await controller.Create(new CreatePrintProjectDto("X", null, null, [null!]), CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(Unwrap(nullLine));
+
+        var blankType = await controller.Create(new CreatePrintProjectDto(
+            "X", null, null, [new PrintProjectTypeLineDto("  ", 10)]), CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(Unwrap(blankType));
+
+        Assert.Equal(before, store.Projects.Count);
+    }
+
+    [Fact]
+    public async Task Update_NullTypeLine_BadRequest()
+    {
+        var (controller, _, _) = Create();
+        var result = await controller.Update("P1", new CreatePrintProjectDto("Benchy", null, null, [null!]), CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(Unwrap(result));
     }
 
     [Fact]
@@ -693,6 +775,19 @@ public class SpoolEventsProjectLinkTests
             ],
         });
         return (new SpoolsController(store.SpoolRepository, new FakeTypeRepository(T1), store, new FakeChangeNotifier()), store);
+    }
+
+    [Fact]
+    public async Task DisableAndEnableEvent_ProjectLinked_BadRequest()
+    {
+        var (controller, _) = Create();
+
+        var disable = await controller.DisableEvent("S1", 2, CancellationToken.None);
+        var disableBad = Assert.IsType<BadRequestObjectResult>(disable.Result);
+        Assert.Contains("print project page", (string)disableBad.Value!.GetType().GetProperty("error")!.GetValue(disableBad.Value)!);
+
+        var enable = await controller.EnableEvent("S1", 2, CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(enable.Result);
     }
 
     [Fact]

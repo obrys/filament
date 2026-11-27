@@ -23,30 +23,30 @@ The dashboard's consumption graph is a hand-built inline-SVG plot (no charting l
 
 The main navigation gains a "Print projects" item after "Spools". The list shows, per row, the title (linked to the detail page), a compact summary of the defined types with grams, the effective date, an archived marker when archived, and the row actions. The "show archived" toggle, off by default, reveals archived projects; archive, unarchive, and delete each require a confirmation dialogue.
 
-On the print page, a slot may be filled with a spool of a different type through the "other spools" dialogue, and the same spool may back several slots with separate grams. Confirmation is blocked with a visible error — and nothing is consumed — while any slot is unfilled or has 0 g, or while a spool's summed grams across its slots exceed its remaining balance. A sealed spool used in the print is auto-opened by it. After confirmation the user returns to the project detail page, where the new print appears at the top of the project prints section, highlighted.
+On the print page, a slot may be filled with a spool of a different type through the "other spools" dialogue, and the same spool may back several slots with separate grams. Confirmation is blocked with a visible error — and nothing is consumed — while any slot is unfilled or has 0 g, or while a spool's summed grams across its slots exceed its remaining balance. A sealed spool used in the print is opened by it through a separate `Opened` spool event. After confirmation the user returns to the project detail page, where the new print appears at the top of the project prints section, highlighted.
 
 The two pages link through each other with row highlighting: a project-linked row in a spool's history links to `/print-projects/<projectId>?highlight=<projectPrintId>`, and a spool shown in a project print links to `/spools/<spoolId>?highlight=<spoolEventId>`. The highlighted row is marked and scrolled into view. Project-linked history rows are visually distinguished from regular print rows and carry no undo/redo controls; undo and redo of a project print live only in the project prints section. See the completed [008 print project](../done/008-print-project/) change request for the full specification.
 
 ## HTTP API
 
-The API uses JSON and serializes enum values as strings. Successful mutations notify connected WebSocket clients. Standard error behavior is `404` for an unknown resource, `400` for invalid lifecycle input or a rejected print-project operation (definition validation, an unknown filament type in a definition, printing or editing an archived project, an unfilled or 0 g slot, an over-balance selection, the delete guard, and a redo rejected by a spool lifecycle guard), and `409` when a type with spools is deleted. The development environment exposes an OpenAPI document at `/openapi/v1.json`.
+The API uses JSON and serializes enum values as strings. Successful mutations notify connected WebSocket clients. Standard error behavior is `404` for an unknown resource, `400` for invalid lifecycle input or a rejected print-project operation (definition validation, an unknown filament type in a definition, printing or editing an archived project, an unfilled or 0 g slot, an over-balance selection, the delete guard, and a redo rejected by a spool lifecycle guard), and `409` when a type with spools or a type used by a print project is deleted, or a spool with active events is deleted. Malformed print-project and print bodies are rejected with `400`. The development environment exposes an OpenAPI document at `/openapi/v1.json`.
 
 | Method and path | Behavior |
 |---|---|
 | `GET /api/filament-types` | List types and facets. Repeat `brand`, `material`, `type`, and `color` query keys to filter. |
-| `GET/PUT/DELETE /api/filament-types/{id}` | Read, replace, or delete a type. Deletion fails if any spool references it. |
+| `GET/PUT/DELETE /api/filament-types/{id}` | Read, replace, or delete a type. Deletion fails if any spool or print project references it. |
 | `POST /api/filament-types` | Create a type; the server assigns its ID. |
 | `GET /api/spools` | List spools and facets. Supports `filamentTypeId`, `includeFinished`, `sort`, and the shared facet keys. |
 | `GET /api/spools/{id}` | Read a spool, including effective empty-spool and total weights. |
 | `POST /api/spools` | Create a sealed spool and its immutable creation event. |
-| `DELETE /api/spools/{id}` | Delete a spool and its event history. |
+| `DELETE /api/spools/{id}` | Delete a spool and its event history; rejected (`409`) while it has any active event other than `Created`; otherwise also removes its undone project prints. |
 | `GET /api/spools/{id}/events` | List history with running balances; disabled events have `remainingAfterGrams: null`. Events created by a project print additionally carry `projectPrintId` and the resolved owning `projectId` (both `null` for regular events). |
 | `POST /api/spools/{id}/open` | Open a sealed spool. |
 | `POST /api/spools/{id}/consume` | Record `{ grams, projectName?, projectUrl?, notes? }`. |
 | `POST /api/spools/{id}/adjust` | Set `{ newRemainingGrams, notes? }`. |
 | `POST /api/spools/{id}/finish` | Add or redo a finish marker. |
-| `POST /api/spools/{id}/events/{eventId}/disable` | Undo an event subject to lifecycle guards. |
-| `POST /api/spools/{id}/events/{eventId}/enable` | Redo an event subject to lifecycle guards. |
+| `POST /api/spools/{id}/events/{eventId}/disable` | Undo an event subject to lifecycle guards; rejected (`400`) for events linked to a project print. |
+| `POST /api/spools/{id}/events/{eventId}/enable` | Redo an event subject to lifecycle guards; rejected (`400`) for events linked to a project print. |
 | `POST /api/spools/reevaluate` | Repair cached state for all spools from their histories. |
 | `GET /api/print-projects` | List print projects with their effective date, ordered newest first (ties by title A–Z, then ID); `includeArchived=true` also returns archived projects. |
 | `GET /api/print-projects/{id}` | Read a project including its defined types with grams and its project prints (the only endpoint that populates prints). |
@@ -55,7 +55,7 @@ The API uses JSON and serializes enum values as strings. Successful mutations no
 | `POST /api/print-projects/{id}/archive` | Archive the project, setting the archived flag and timestamp. |
 | `POST /api/print-projects/{id}/unarchive` | Unarchive the project, clearing the archived flag and timestamp. |
 | `DELETE /api/print-projects/{id}` | Delete the project, all of its prints (including undone ones), and the linked spool events; allowed only when archived and without enabled prints. |
-| `POST /api/print-projects/{id}/prints` | Confirm a print from `{ spools: [{ spoolId, grams }] }` (one entry per defined type); consumes the selected spools, auto-opens any sealed one, and returns the created project print. |
+| `POST /api/print-projects/{id}/prints` | Confirm a print from `{ spools: [{ spoolId, grams }] }` (one entry per defined type); consumes the selected spools (one event per slot), opens any sealed one through a separate `Opened` event, and returns the created project print. |
 | `POST /api/print-projects/{id}/prints/{printId}/undo` | Disable the project print and all of its linked spool events. |
 | `POST /api/print-projects/{id}/prints/{printId}/redo` | Re-enable the project print and its spool events, subject to the spool lifecycle guards. |
 | `GET /api/dashboard/summary` | Return type, active-spool, finished-spool, and active-remaining totals. |

@@ -271,7 +271,7 @@ namespace Filament.Infrastructure.Persistence.Migrations
                     b.HasOne("Filament.Infrastructure.Entities.FilamentTypeEntity", "FilamentType")
                         .WithMany()
                         .HasForeignKey("FilamentTypeId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Filament.Infrastructure.Entities.PrintProjectEntity", "Project")

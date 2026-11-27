@@ -46,6 +46,9 @@ public sealed class FilamentTypeRepository : IFilamentTypeRepository
     {
         if (await HasSpoolsAsync(id, ct))
             throw new InvalidOperationException("Cannot delete a filament type that still has spools.");
+        if (await _db.PrintProjectTypes.AnyAsync(t => t.FilamentTypeId == id, ct))
+            throw new InvalidOperationException(
+                "Cannot delete a filament type that is used by a print project — archive and delete the project first.");
         var e = await _db.FilamentTypes.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (e is null) return false;
         _db.FilamentTypes.Remove(e);
@@ -118,6 +121,51 @@ public sealed class SpoolRepository : ISpoolRepository
     {
         var e = await _db.Spools.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (e is null) return false;
+
+        // A spool can be deleted only when every event except the immutable Created one is undone
+        // (the same rule the UI applies).
+        var hasActiveEvents = await _db.SpoolEvents
+            .AnyAsync(ev => ev.SpoolId == id && ev.Kind != (int)SpoolEventKind.Created && !ev.IsDisabled, ct);
+        if (hasActiveEvents)
+            throw new InvalidOperationException(
+                "Cannot delete a spool that has active events — undo them first.");
+
+        // Undone project prints of the spool are removed as a whole — including their (undone)
+        // events on other spools, which are re-evaluated afterwards.
+        var printIds = await _db.SpoolEvents
+            .Where(ev => ev.SpoolId == id && ev.ProjectPrintId != null)
+            .Select(ev => ev.ProjectPrintId!)
+            .Distinct()
+            .ToListAsync(ct);
+        if (printIds.Count > 0)
+        {
+            var prints = await _db.ProjectPrints.Where(p => printIds.Contains(p.Id)).ToListAsync(ct);
+            var linkedEvents = await _db.SpoolEvents
+                .Where(ev => ev.ProjectPrintId != null && printIds.Contains(ev.ProjectPrintId))
+                .ToListAsync(ct);
+            if (prints.Any(p => !p.IsDisabled))
+                throw new InvalidOperationException(
+                    "Cannot delete a spool that has project prints — undo them on the print project page first.");
+
+            var otherSpoolIds = linkedEvents.Select(ev => ev.SpoolId).Where(sid => sid != id).Distinct().ToList();
+            if (otherSpoolIds.Count > 0)
+            {
+                var removedIds = linkedEvents.Select(ev => ev.Id).ToHashSet();
+                var otherEvents = await _db.SpoolEvents.Where(ev => otherSpoolIds.Contains(ev.SpoolId)).ToListAsync(ct);
+                var otherSpools = await _db.Spools.Where(sp => otherSpoolIds.Contains(sp.Id)).ToListAsync(ct);
+                foreach (var other in otherSpools)
+                {
+                    var kept = otherEvents
+                        .Where(ev => ev.SpoolId == other.Id && !removedIds.Contains(ev.Id))
+                        .Select(EntityMapping.ToDomain)
+                        .ToList();
+                    ApplyState(other, SpoolLifecycle.Evaluate(other.InitialNetGrams, kept));
+                }
+            }
+            _db.SpoolEvents.RemoveRange(linkedEvents);
+            _db.ProjectPrints.RemoveRange(prints);
+        }
+
         _db.Spools.Remove(e);
         await _db.SaveChangesAsync(ct);
         return true;
@@ -307,6 +355,7 @@ public sealed class PrintProjectRepository : IPrintProjectRepository
             .Include(p => p.Types)
             .FirstOrDefaultAsync(x => x.Id == projectId, ct)
             ?? throw new InvalidOperationException($"PrintProject '{projectId}' not found.");
+        PrintProjectRules.ValidateSelection(project.ToDomain(), selection);
 
         var spoolIds = selection.Select(s => s.SpoolId).Distinct().ToList();
         var spools = await _db.Spools.Where(s => spoolIds.Contains(s.Id)).ToListAsync(ct);
@@ -320,7 +369,7 @@ public sealed class PrintProjectRepository : IPrintProjectRepository
                 events.Where(e => e.SpoolId == id).Select(EntityMapping.ToDomain).ToList()))
             .ToList();
         var occurredAt = DateTimeOffset.UtcNow;
-        var plans = PrintProjectRules.PlanPrint(project.ToDomain(), selection, contexts, occurredAt);
+        var plan = PrintProjectRules.PlanPrint(project.ToDomain(), selection, contexts, occurredAt);
 
         var print = new ProjectPrintEntity
         {
@@ -329,10 +378,18 @@ public sealed class PrintProjectRepository : IPrintProjectRepository
             OccurredAt = occurredAt,
         };
         _db.ProjectPrints.Add(print);
-        var newEvents = new List<SpoolEventEntity>(plans.Count);
-        foreach (var plan in plans)
+        var newEvents = new List<SpoolEventEntity>(plan.OpenEvents.Count + plan.PrintEvents.Count);
+        // The Open events are ordinary, independent spool events (not linked to the project print):
+        // undoing/redoing the print never touches them.
+        foreach (var open in plan.OpenEvents)
         {
-            var entity = plan.EventToAdd!.ToEntity();
+            var entity = open.ToEntity();
+            newEvents.Add(entity);
+            _db.SpoolEvents.Add(entity);
+        }
+        foreach (var printEvent in plan.PrintEvents)
+        {
+            var entity = printEvent.ToEntity();
             entity.ProjectPrintId = print.Id;
             newEvents.Add(entity);
             _db.SpoolEvents.Add(entity);

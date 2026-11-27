@@ -149,11 +149,30 @@ public sealed class SpoolsController : ControllerBase
 
     [HttpPost("{id}/events/{eventId:long}/disable")]
     public Task<ActionResult<SpoolDto>> DisableEvent(string id, long eventId, CancellationToken ct) =>
-        ApplyLifecycle(id, (_, events) => SpoolLifecycle.PlanSetEnabled(events, eventId, enabled: false), ct);
+        ApplyLifecycle(id, (_, events) =>
+        {
+            RejectProjectLinked(events, eventId);
+            return SpoolLifecycle.PlanSetEnabled(events, eventId, enabled: false);
+        }, ct);
 
     [HttpPost("{id}/events/{eventId:long}/enable")]
     public Task<ActionResult<SpoolDto>> EnableEvent(string id, long eventId, CancellationToken ct) =>
-        ApplyLifecycle(id, (_, events) => SpoolLifecycle.PlanSetEnabled(events, eventId, enabled: true), ct);
+        ApplyLifecycle(id, (_, events) =>
+        {
+            RejectProjectLinked(events, eventId);
+            return SpoolLifecycle.PlanSetEnabled(events, eventId, enabled: true);
+        }, ct);
+
+    /// <summary>
+    /// Events created by a project print are undone/redone together with the print, on the print
+    /// project page only; toggling one alone would desynchronise the print from its events.
+    /// </summary>
+    private static void RejectProjectLinked(IReadOnlyList<SpoolEvent> events, long eventId)
+    {
+        if (events.FirstOrDefault(e => e.Id == eventId)?.ProjectPrintId is not null)
+            throw new InvalidOperationException(
+                "This event belongs to a project print — undo or redo the print on the print project page.");
+    }
 
     /// <summary>
     /// Recomputes every spool's cached state and remaining weight from its enabled events, persists
@@ -202,9 +221,19 @@ public sealed class SpoolsController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id, CancellationToken ct)
     {
-        var removed = await _spools.DeleteAsync(id, ct);
+        bool removed;
+        try
+        {
+            removed = await _spools.DeleteAsync(id, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
         if (!removed) return NotFound();
+        // Deleting undone project prints along with the spool changes other spools and projects too.
         await _notifier.NotifyAsync("spool", id, ct);
+        await _notifier.NotifyAsync("print-project", null, ct);
         return NoContent();
     }
 }

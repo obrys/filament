@@ -155,12 +155,7 @@ public static class SpoolLifecycle
         });
     }
 
-    /// <summary>
-    /// Records a print (consumption). Requires the spool to be open, unless <paramref name="allowSealed"/>
-    /// is set: a project print may consume a still-sealed spool, and the evaluation rule for a print
-    /// on a sealed spool then opens it at the print's <c>OccurredAt</c>. A finished spool is never
-    /// consumable, with or without <paramref name="allowSealed"/>.
-    /// </summary>
+    /// <summary>Records a print (consumption). Requires the spool to be open.</summary>
     public static LifecyclePlan PlanConsume(
         string spoolId,
         int initialNetGrams,
@@ -169,16 +164,12 @@ public static class SpoolLifecycle
         string? projectName = null,
         string? projectUrl = null,
         string? notes = null,
-        DateTimeOffset? at = null,
-        bool allowSealed = false)
+        DateTimeOffset? at = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(grams);
         var list = Materialize(events);
         var state = Evaluate(initialNetGrams, list);
-        if (!allowSealed)
-            RequireOpen(state.Status);
-        else if (state.Status == SpoolStatus.Finished)
-            throw new InvalidOperationException("Spool is already finished.");
+        RequireOpen(state.Status);
         if (grams > state.RemainingGrams)
             throw new InvalidOperationException(
                 $"Cannot consume {grams}g — only {state.RemainingGrams}g remaining.");

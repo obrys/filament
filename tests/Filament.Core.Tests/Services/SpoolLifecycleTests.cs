@@ -212,51 +212,6 @@ public class SpoolLifecycleTests
     }
 
     [Fact]
-    public void PlanConsume_AllowSealed_WhenSealed_ConsumesAndOpensAtPrintTime()
-    {
-        var events = new List<SpoolEvent> { Ev(1, SpoolEventKind.Created) };
-        var plan = SpoolLifecycle.PlanConsume(
-            "AAAA", Initial, events, 50, "Benchy", at: T0.AddHours(1), allowSealed: true);
-        Assert.Equal(SpoolEventKind.Print, plan.EventToAdd!.Kind);
-        Assert.Equal(-50, plan.EventToAdd.DeltaGrams);
-        var (_, state) = Apply(events, plan);
-        // A print on a sealed spool opens it at the print's own timestamp.
-        Assert.Equal(SpoolStatus.Open, state.Status);
-        Assert.Equal(T0.AddHours(1), state.OpenedAt);
-        Assert.Equal(950, state.RemainingGrams);
-    }
-
-    [Fact]
-    public void PlanConsume_AllowSealed_WhenOpen_SameAsDefault()
-    {
-        var events = new List<SpoolEvent> { Ev(1, SpoolEventKind.Opened) };
-        var plan = SpoolLifecycle.PlanConsume("AAAA", Initial, events, 50, allowSealed: true);
-        Assert.Equal(SpoolEventKind.Print, plan.EventToAdd!.Kind);
-        Assert.Equal(-50, plan.EventToAdd.DeltaGrams);
-    }
-
-    [Fact]
-    public void PlanConsume_AllowSealed_MoreThanRemaining_Throws()
-    {
-        var events = new List<SpoolEvent> { Ev(1, SpoolEventKind.Created) };
-        Assert.Throws<InvalidOperationException>(
-            () => SpoolLifecycle.PlanConsume("AAAA", Initial, events, 1500, allowSealed: true));
-    }
-
-    [Fact]
-    public void PlanConsume_AllowSealed_WhenFinished_StillThrows()
-    {
-        var events = new List<SpoolEvent>
-        {
-            Ev(1, SpoolEventKind.Opened),
-            Ev(2, SpoolEventKind.Finished, hours: 1),
-        };
-        var ex = Assert.Throws<InvalidOperationException>(
-            () => SpoolLifecycle.PlanConsume("AAAA", Initial, events, 10, allowSealed: true));
-        Assert.Contains("finished", ex.Message);
-    }
-
-    [Fact]
     public void PlanConsume_WhenFinished_Throws()
     {
         var events = new List<SpoolEvent>

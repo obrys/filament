@@ -5,9 +5,9 @@ namespace Filament.Core.Services;
 
 /// <summary>
 /// Pure domain rules for print projects: the effective list date, the list ordering, definition
-/// validation, the archive/delete guards, and the planning of a project print (one lifecycle plan
-/// per selected spool, built on <see cref="SpoolLifecycle.PlanConsume"/> with sealed spools
-/// allowed — the print auto-opens them at its own timestamp).
+/// validation, the archive/delete guards, and the planning of a project print (one print event per
+/// slot, built on <see cref="SpoolLifecycle.PlanConsume"/>, plus an explicit Open event for every
+/// spool that is still sealed).
 /// </summary>
 public static class PrintProjectRules
 {
@@ -63,6 +63,8 @@ public static class PrintProjectRules
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var line in types)
         {
+            if (string.IsNullOrWhiteSpace(line.FilamentTypeId))
+                throw new InvalidOperationException("Every line needs a filament type.");
             if (!seen.Add(line.FilamentTypeId))
                 throw new InvalidOperationException($"Filament type '{line.FilamentTypeId}' is defined more than once.");
             if (line.Grams < 1)
@@ -90,13 +92,31 @@ public static class PrintProjectRules
     }
 
     /// <summary>
-    /// Plans a project print: one <see cref="LifecyclePlan"/> per distinct selected spool (in
-    /// first-appearance order), consuming the grams summed across all of the spool's slots.
-    /// Every pre-defined type must be backed by a slot (no skipping); the summed grams per spool
-    /// must fit its remaining balance; finished spools are rejected. All validation happens before
-    /// any plan is returned, so a violation changes nothing.
+    /// Validates the shape of a print selection (independent of spool state): one slot per defined
+    /// type, a spool in every slot, at least 1 g per slot.
     /// </summary>
-    public static IReadOnlyList<LifecyclePlan> PlanPrint(
+    public static void ValidateSelection(PrintProject project, IReadOnlyList<PrintSelection> selection)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(selection);
+        if (selection.Count != project.Types.Count)
+            throw new InvalidOperationException(
+                "Every defined filament type needs exactly one spool in the print selection.");
+        if (selection.Any(s => string.IsNullOrWhiteSpace(s.SpoolId)))
+            throw new InvalidOperationException("Give a spool to every filament type before printing.");
+        if (selection.Any(s => s.Grams < 1))
+            throw new InvalidOperationException("Every spool in the print must get at least 1 g.");
+    }
+
+    /// <summary>
+    /// Plans a project print: one <c>Print</c> event per slot (a spool used by several slots gets
+    /// one event per slot), plus an explicit, independent <c>Opened</c> event for every spool that
+    /// is still sealed (so the opening is an ordinary spool event that survives undo/redo of the
+    /// print and can be undone on its own). Every pre-defined type must be backed by a slot (no
+    /// skipping); the grams summed per spool must fit its remaining balance; finished spools are
+    /// rejected. All validation happens before any plan is returned, so a violation changes nothing.
+    /// </summary>
+    public static ProjectPrintPlan PlanPrint(
         PrintProject project,
         IReadOnlyList<PrintSelection> selection,
         IReadOnlyList<SpoolWithEvents> spools,
@@ -107,36 +127,56 @@ public static class PrintProjectRules
         ArgumentNullException.ThrowIfNull(spools);
 
         EnsureNotArchived(project, "printed");
-
-        if (selection.Count != project.Types.Count)
-            throw new InvalidOperationException(
-                "Every defined filament type needs exactly one spool in the print selection.");
-        if (selection.Any(s => string.IsNullOrWhiteSpace(s.SpoolId)))
-            throw new InvalidOperationException("Give a spool to every filament type before printing.");
-        if (selection.Any(s => s.Grams < 1))
-            throw new InvalidOperationException("Every spool in the print must get at least 1 g.");
+        ValidateSelection(project, selection);
 
         var spoolById = spools.ToDictionary(s => s.Spool.Id, StringComparer.Ordinal);
-        var perSpool = selection
-            .GroupBy(s => s.SpoolId, StringComparer.Ordinal)
-            .Select(g => new { g.Key, Grams = g.Sum(s => s.Grams) })
-            .ToList();
+        var openEvents = new List<SpoolEvent>();
+        var printEvents = new List<SpoolEvent>(selection.Count);
 
-        var plans = new List<LifecyclePlan>(perSpool.Count);
-        foreach (var group in perSpool)
+        // Spool by spool, in first-appearance order; each slot is planned against the history
+        // extended with the events already planned for the same spool, so the per-spool total is
+        // checked against its remaining balance.
+        foreach (var spoolId in selection.Select(s => s.SpoolId).Distinct(StringComparer.Ordinal))
         {
-            if (!spoolById.TryGetValue(group.Key, out var context))
-                throw new InvalidOperationException($"Spool '{group.Key}' not found.");
-            plans.Add(SpoolLifecycle.PlanConsume(
-                context.Spool.Id,
-                context.Spool.InitialNetGrams,
-                context.Events,
-                group.Grams,
-                projectName: project.Title,
-                projectUrl: project.Url,
-                at: occurredAt,
-                allowSealed: true));
+            if (!spoolById.TryGetValue(spoolId, out var context))
+                throw new InvalidOperationException($"Spool '{spoolId}' not found.");
+
+            var working = context.Events.ToList();
+            var state = SpoolLifecycle.Evaluate(context.Spool.InitialNetGrams, working);
+            if (state.Status == SpoolStatus.Finished)
+                throw new InvalidOperationException("Spool is already finished.");
+            if (state.Status == SpoolStatus.Sealed)
+            {
+                var open = new SpoolEvent
+                {
+                    SpoolId = spoolId,
+                    Kind = SpoolEventKind.Opened,
+                    DeltaGrams = 0,
+                    OccurredAt = occurredAt,
+                };
+                openEvents.Add(open);
+                working.Add(open);
+            }
+
+            foreach (var slot in selection.Where(s => string.Equals(s.SpoolId, spoolId, StringComparison.Ordinal)))
+            {
+                var plan = SpoolLifecycle.PlanConsume(
+                    spoolId,
+                    context.Spool.InitialNetGrams,
+                    working,
+                    slot.Grams,
+                    projectName: project.Title,
+                    projectUrl: project.Url,
+                    at: occurredAt);
+                working.Add(plan.EventToAdd!);
+                printEvents.Add(plan.EventToAdd!);
+            }
         }
-        return plans;
+        return new ProjectPrintPlan(openEvents, printEvents);
     }
 }
+
+/// <summary>The spool events a project print creates: independent Open events and the linked Print events.</summary>
+public sealed record ProjectPrintPlan(
+    IReadOnlyList<SpoolEvent> OpenEvents,
+    IReadOnlyList<SpoolEvent> PrintEvents);

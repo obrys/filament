@@ -88,12 +88,12 @@ public sealed class FilamentDbContext : DbContext
              .WithMany(p => p.Types)
              .HasForeignKey(x => x.ProjectId)
              .OnDelete(DeleteBehavior.Cascade);
-            // Cascade: deleting a filament type referenced by a project definition drops the line
-            // (the project keeps working for its other types) instead of 500-ing (plan Risks).
+            // Restrict: a filament type used by a project definition cannot be deleted — the
+            // project must be archived and deleted first (the types repository rejects it with 409).
             e.HasOne(x => x.FilamentType)
              .WithMany()
              .HasForeignKey(x => x.FilamentTypeId)
-             .OnDelete(DeleteBehavior.Cascade);
+             .OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => new { x.ProjectId, x.FilamentTypeId }).IsUnique();
         });
         modelBuilder.Entity<ProjectPrintEntity>(e =>

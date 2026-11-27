@@ -61,7 +61,7 @@ public class PrintProjectRulesTests
         if (status != SpoolStatus.Sealed) events.Add(Ev(2, id, SpoolEventKind.Opened, at: T0.AddHours(1)));
         if (status == SpoolStatus.Finished) events.Add(Ev(3, id, SpoolEventKind.Finished, at: T0.AddHours(2)));
         var spool = Spool(id, status: status);
-        Apply(spool, events, null);
+        Apply(spool, events, (LifecyclePlan?)null);
         return new SpoolWithEvents(spool, events);
     }
 
@@ -93,6 +93,15 @@ public class PrintProjectRulesTests
         spool.OpenedAt = state.OpenedAt;
         spool.FinishedAt = state.FinishedAt;
         spool.LastUsedAt = state.LastUsedAt;
+        return state;
+    }
+
+    // Applies every event of a project print plan (Open events first) and re-evaluates the spool.
+    private static SpoolState Apply(Spool spool, List<SpoolEvent> events, ProjectPrintPlan plan)
+    {
+        SpoolState state = default!;
+        foreach (var add in plan.OpenEvents.Concat(plan.PrintEvents).Where(e => e.SpoolId == spool.Id))
+            state = Apply(spool, events, new LifecyclePlan(EventToAdd: add));
         return state;
     }
 
@@ -339,14 +348,15 @@ public class PrintProjectRulesTests
     {
         var p = Project(types: ("T1", 120));
         var context = Context("S1", SpoolStatus.Open);
-        var plans = PrintProjectRules.PlanPrint(p, [new PrintSelection("S1", 120)], [context], T0.AddHours(5));
+        var plan = PrintProjectRules.PlanPrint(p, [new PrintSelection("S1", 120)], [context], T0.AddHours(5));
 
-        var plan = Assert.Single(plans);
-        Assert.Equal(SpoolEventKind.Print, plan.EventToAdd!.Kind);
-        Assert.Equal(-120, plan.EventToAdd.DeltaGrams);
-        Assert.Equal("Benchy", plan.EventToAdd.ProjectName);
-        Assert.Equal("https://example.com/benchy", plan.EventToAdd.ProjectUrl);
-        Assert.Equal(T0.AddHours(5), plan.EventToAdd.OccurredAt);
+        Assert.Empty(plan.OpenEvents);
+        var print = Assert.Single(plan.PrintEvents);
+        Assert.Equal(SpoolEventKind.Print, print.Kind);
+        Assert.Equal(-120, print.DeltaGrams);
+        Assert.Equal("Benchy", print.ProjectName);
+        Assert.Equal("https://example.com/benchy", print.ProjectUrl);
+        Assert.Equal(T0.AddHours(5), print.OccurredAt);
 
         var state = Apply(context.Spool, context.Events.ToList(), plan);
         Assert.Equal(880, state.RemainingGrams);
@@ -354,19 +364,35 @@ public class PrintProjectRulesTests
     }
 
     [Fact]
-    public void PlanPrint_SealedSpool_ConsumesAndEvaluationOpensItAtPrintTime()
+    public void PlanPrint_SealedSpool_AddsAnIndependentOpenEventAtPrintTime()
     {
         var p = Project(types: ("T1", 120));
         var context = Context("S1", SpoolStatus.Sealed);
-        var plans = PrintProjectRules.PlanPrint(p, [new PrintSelection("S1", 120)], [context], T0.AddHours(5));
+        var plan = PrintProjectRules.PlanPrint(p, [new PrintSelection("S1", 120)], [context], T0.AddHours(5));
 
-        var plan = Assert.Single(plans);
-        Assert.Equal(SpoolEventKind.Print, plan.EventToAdd!.Kind);
+        var open = Assert.Single(plan.OpenEvents);
+        Assert.Equal(SpoolEventKind.Opened, open.Kind);
+        Assert.Equal(0, open.DeltaGrams);
+        Assert.Equal(T0.AddHours(5), open.OccurredAt);
+        Assert.Null(open.ProjectPrintId);
+        Assert.Equal(SpoolEventKind.Print, Assert.Single(plan.PrintEvents).Kind);
 
         var state = Apply(context.Spool, context.Events.ToList(), plan);
         Assert.Equal(SpoolStatus.Open, state.Status);
         Assert.Equal(T0.AddHours(5), state.OpenedAt);
         Assert.Equal(880, state.RemainingGrams);
+    }
+
+    [Fact]
+    public void PlanPrint_SealedSpoolInTwoSlots_OpensOnlyOnce()
+    {
+        var p = Project(types: [("T1", 100), ("T2", 50)]);
+        var plan = PrintProjectRules.PlanPrint(
+            p, [new PrintSelection("S1", 100), new PrintSelection("S1", 50)],
+            [Context("S1", SpoolStatus.Sealed)], T0.AddHours(5));
+
+        Assert.Single(plan.OpenEvents);
+        Assert.Equal(2, plan.PrintEvents.Count);
     }
 
     [Fact]
@@ -390,7 +416,7 @@ public class PrintProjectRulesTests
             Ev(3, "S1", SpoolEventKind.Print, -950, at: T0.AddHours(2)),
         };
         var spool = Spool("S1");
-        Apply(spool, events, null);
+        Apply(spool, events, (LifecyclePlan?)null);
         var context = new SpoolWithEvents(spool, events);
 
         var ex = Assert.Throws<InvalidOperationException>(() => PrintProjectRules.PlanPrint(
@@ -399,17 +425,30 @@ public class PrintProjectRulesTests
     }
 
     [Fact]
-    public void PlanPrint_SameSpoolInTwoSlots_SinglePlanWithSummedGrams()
+    public void PlanPrint_SameSpoolInTwoSlots_OneEventPerSlot()
     {
         var p = Project(types: [("T1", 100), ("T2", 50)]);
         var context = Context("S1");
-        var plans = PrintProjectRules.PlanPrint(
+        var plan = PrintProjectRules.PlanPrint(
             p,
             [new PrintSelection("S1", 100), new PrintSelection("S1", 50)],
             [context], T0);
 
-        var plan = Assert.Single(plans);
-        Assert.Equal(-150, plan.EventToAdd!.DeltaGrams);
+        Assert.Equal([-100, -50], plan.PrintEvents.Select(e => e.DeltaGrams));
+        Assert.All(plan.PrintEvents, e => Assert.Equal("S1", e.SpoolId));
+        var state = Apply(context.Spool, context.Events.ToList(), plan);
+        Assert.Equal(850, state.RemainingGrams);
+    }
+
+    [Fact]
+    public void PlanPrint_SameSpoolInTwoSlots_SumOverBalance_Throws()
+    {
+        var p = Project(types: [("T1", 100), ("T2", 50)]);
+        var ex = Assert.Throws<InvalidOperationException>(() => PrintProjectRules.PlanPrint(
+            p,
+            [new PrintSelection("S1", 600), new PrintSelection("S1", 500)],
+            [Context("S1")], T0));
+        Assert.Contains("only 400g remaining", ex.Message);
     }
 
     [Fact]
@@ -420,14 +459,18 @@ public class PrintProjectRulesTests
         var s2 = Context("S2");
         var s3 = Context("S3");
 
-        var plans = PrintProjectRules.PlanPrint(
+        var plan = PrintProjectRules.PlanPrint(
             p,
             [new PrintSelection("S3", 10), new PrintSelection("S1", 100), new PrintSelection("S2", 50)],
             [s3, s1, s2], T0);
 
-        Assert.Equal(3, plans.Count);
-        Assert.Equal("S3", plans[0].EventToAdd!.SpoolId);
-        Assert.Equal("S1", plans[1].EventToAdd!.SpoolId);
-        Assert.Equal("S2", plans[2].EventToAdd!.SpoolId);
+        Assert.Equal(["S3", "S1", "S2"], plan.PrintEvents.Select(e => e.SpoolId));
+    }
+
+    [Fact]
+    public void ValidateDefinition_BlankFilamentTypeId_Throws()
+    {
+        Assert.Throws<InvalidOperationException>(() => PrintProjectRules.ValidateDefinition(
+            "T", null, null, [new PrintProjectType { FilamentTypeId = " ", Grams = 10 }]));
     }
 }
