@@ -15,12 +15,15 @@ public sealed class SpoolsController : ControllerBase
 {
     private readonly ISpoolRepository _spools;
     private readonly IFilamentTypeRepository _types;
+    private readonly IPrintProjectRepository _printProjects;
     private readonly IChangeNotifier _notifier;
 
-    public SpoolsController(ISpoolRepository spools, IFilamentTypeRepository types, IChangeNotifier notifier)
+    public SpoolsController(
+        ISpoolRepository spools, IFilamentTypeRepository types, IPrintProjectRepository printProjects, IChangeNotifier notifier)
     {
         _spools = spools;
         _types = types;
+        _printProjects = printProjects;
         _notifier = notifier;
     }
 
@@ -80,7 +83,16 @@ public sealed class SpoolsController : ControllerBase
         if (spool is null) return NotFound();
         var events = await _spools.ListEventsAsync(id, ct);
         var remainingAfter = SpoolLifecycle.RunningRemaining(spool.InitialNetGrams, events);
-        return Ok(events.Select(e => e.ToDto(remainingAfter[e.Id])).ToList());
+        // Resolve the owning project of every project-linked event; an unresolvable id maps to null.
+        var projectIds = new Dictionary<string, string>();
+        foreach (var printId in events.Select(e => e.ProjectPrintId).Where(x => x is not null)!.Distinct())
+        {
+            var projectId = await _printProjects.GetProjectIdByPrintIdAsync(printId!, ct);
+            if (projectId is not null) projectIds[printId!] = projectId;
+        }
+        return Ok(events
+            .Select(e => e.ToDto(remainingAfter[e.Id], e.ProjectPrintId is null ? null : projectIds.GetValueOrDefault(e.ProjectPrintId)))
+            .ToList());
     }
 
     [HttpPost]

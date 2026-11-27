@@ -68,6 +68,8 @@ public sealed record SpoolEventDto(
     int DeltaGrams,
     int? RemainingAfterGrams,
     bool IsDisabled,
+    string? ProjectPrintId,
+    string? ProjectId,
     string? ProjectName,
     string? ProjectUrl,
     string? Notes,
@@ -112,3 +114,66 @@ public sealed record FilamentTypeListDto(IReadOnlyList<FilamentTypeDto> Items, F
 
 /// <summary>Filtered spools together with their facet breakdown.</summary>
 public sealed record SpoolListDto(IReadOnlyList<SpoolDto> Items, FacetsDto Facets);
+
+// --- Print projects ---
+
+/// <summary>A defined filament type of a print project, with its display fields and expected grams.</summary>
+public sealed record PrintProjectTypeDto(
+    string FilamentTypeId,
+    string Brand,
+    string Material,
+    string Type,
+    string Color,
+    string? ColorHex,
+    int Grams);
+
+/// <summary>One spool consumed by a project print: the spool, the grams taken from it, and the spool's type for display.</summary>
+public sealed record ProjectPrintEventDto(
+    long SpoolEventId,
+    string SpoolId,
+    int Grams,
+    string? Brand,
+    string? Material,
+    string? Type,
+    string? Color,
+    string? ColorHex);
+
+/// <summary>A single use of a print project, with the spools it consumed.</summary>
+public sealed record ProjectPrintDto(
+    string Id,
+    DateTimeOffset OccurredAt,
+    bool IsDisabled,
+    IReadOnlyList<ProjectPrintEventDto> Events);
+
+/// <summary>A print project; <see cref="Prints"/> is populated on the detail endpoint only.</summary>
+public sealed record PrintProjectDto(
+    string Id,
+    string Title,
+    string? Description,
+    string? Url,
+    bool IsArchived,
+    DateTimeOffset? ArchivedAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset EffectiveAt,
+    bool HasEnabledPrints,
+    IReadOnlyList<PrintProjectTypeDto> Types,
+    IReadOnlyList<ProjectPrintDto>? Prints);
+
+/// <summary>The print project list result.</summary>
+public sealed record PrintProjectListDto(IReadOnlyList<PrintProjectDto> Items);
+
+/// <summary>One line of a project definition as submitted by the client.</summary>
+public sealed record PrintProjectTypeLineDto(string FilamentTypeId, int Grams);
+
+/// <summary>Create/update body for a print project.</summary>
+public sealed record CreatePrintProjectDto(
+    string Title,
+    string? Description,
+    string? Url,
+    IReadOnlyList<PrintProjectTypeLineDto> Types);
+
+/// <summary>One slot of a project print: the chosen spool and the grams to consume from it.</summary>
+public sealed record PrintSelectionDto(string SpoolId, int Grams);
+
+/// <summary>Confirming a project print: one entry per slot.</summary>
+public sealed record CreateProjectPrintDto(IReadOnlyList<PrintSelectionDto> Spools);

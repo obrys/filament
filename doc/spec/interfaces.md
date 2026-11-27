@@ -11,14 +11,25 @@ The SPA has these browser routes:
 | `/spools` | Spool list, facets, finished toggle, sort selector, creation, label selection with a print-copies dialog, and link to repair. |
 | `/spools/:id` | Spool details, current weights/status, lifecycle actions, spool deletion, and event history. |
 | `/spools/maintenance` | Re-evaluate all cached spool states. |
+| `/print-projects` | Print-project list: create form, "show archived" toggle (off by default), effective-date ordering, and per-row print, edit, archive/unarchive, and delete actions. |
+| `/print-projects/:id` | Project detail: title, description, URL as a clickable link, defined filament types with grams, the project prints section with per-print undo/redo, and print, edit, archive/unarchive, and delete actions. |
+| `/print-projects/:id/print` | Print page: one spool slot per defined type with the type's open and sealed non-finished spools and the defined grams pre-filled, an "other spools" dialogue (all non-finished spools, filterable by brand, material, type, and colour), editable grams, live validation, and confirmation. |
 
 The web container serves the SPA and reverse-proxies `/api/` and `/ws/` to the API. Browser history routes resolve to `index.html`. Hashed assets are cached for one year; the HTML shell is deliberately not cached, so a deploy can load a matching client bundle.
 
 The dashboard's consumption graph is a hand-built inline-SVG plot (no charting library) over a fixed 30-day UTC window, rendering only the zero-filled values the usage endpoint provides. A "Total stock" line (theme `--cyan`) binds to the left axis and a "Consumed" line (theme `--accent`) to the right axis, with a two-entry legend. Each axis is a dotted kilogram ruler drawn in its line's color (including its labels): 3-6 ticks whose top snaps up to a nice kilogram multiple (steps of 0.25, 0.5, 1, 2, 2.5, 5, 10, ...), floored at 1 kg, and the two axes always use different tick counts so their grids never align. Six to eight x-axis month-day labels (always including the window's first day and today, formatted from the UTC day value) each get a grey dotted vertical gridline. Hovering (or tapping) the plot highlights the nearest day with a dashed vertical line and turns the two-entry legend into one enhanced line: each entry appends that day's value to its label and the line ends with the day's short month-day date (e.g. `■ Total stock: 1.5 kg  ■ Consumed: 150 g  — Aug 16`). The two entries sit in fixed slots that never move, moving to another day updates the single line day by day, and leaving the plot (or tapping outside it, the touch replacement) reverts the legend to the plain two entries and hides the highlight; the fixed 3-row readout box is not rendered in any state. Each value is formatted client-side (whole grams below 1 000 g, kilograms at 1 000 g and above with two decimals, half up, trailing zeros dropped); the underlying per-day values remain the exact whole-gram series from the endpoint. All chart ink uses theme variables, so it re-themes with the light/dark mode. See the completed [005 consumption graph](../done/005-consumption-graph/) and [006 onhover legend](../done/006-onhover-legend/) change requests.
 
+## Print projects UI
+
+The main navigation gains a "Print projects" item after "Spools". The list shows, per row, the title (linked to the detail page), a compact summary of the defined types with grams, the effective date, an archived marker when archived, and the row actions. The "show archived" toggle, off by default, reveals archived projects; archive, unarchive, and delete each require a confirmation dialogue.
+
+On the print page, a slot may be filled with a spool of a different type through the "other spools" dialogue, and the same spool may back several slots with separate grams. Confirmation is blocked with a visible error — and nothing is consumed — while any slot is unfilled or has 0 g, or while a spool's summed grams across its slots exceed its remaining balance. A sealed spool used in the print is auto-opened by it. After confirmation the user returns to the project detail page, where the new print appears at the top of the project prints section, highlighted.
+
+The two pages link through each other with row highlighting: a project-linked row in a spool's history links to `/print-projects/<projectId>?highlight=<projectPrintId>`, and a spool shown in a project print links to `/spools/<spoolId>?highlight=<spoolEventId>`. The highlighted row is marked and scrolled into view. Project-linked history rows are visually distinguished from regular print rows and carry no undo/redo controls; undo and redo of a project print live only in the project prints section. See the completed [008 print project](../done/008-print-project/) change request for the full specification.
+
 ## HTTP API
 
-The API uses JSON and serializes enum values as strings. Successful mutations notify connected WebSocket clients. Standard error behavior is `404` for an unknown resource, `400` for invalid lifecycle input, and `409` when a type with spools is deleted. The development environment exposes an OpenAPI document at `/openapi/v1.json`.
+The API uses JSON and serializes enum values as strings. Successful mutations notify connected WebSocket clients. Standard error behavior is `404` for an unknown resource, `400` for invalid lifecycle input or a rejected print-project operation (definition validation, an unknown filament type in a definition, printing or editing an archived project, an unfilled or 0 g slot, an over-balance selection, the delete guard, and a redo rejected by a spool lifecycle guard), and `409` when a type with spools is deleted. The development environment exposes an OpenAPI document at `/openapi/v1.json`.
 
 | Method and path | Behavior |
 |---|---|
@@ -29,7 +40,7 @@ The API uses JSON and serializes enum values as strings. Successful mutations no
 | `GET /api/spools/{id}` | Read a spool, including effective empty-spool and total weights. |
 | `POST /api/spools` | Create a sealed spool and its immutable creation event. |
 | `DELETE /api/spools/{id}` | Delete a spool and its event history. |
-| `GET /api/spools/{id}/events` | List history with running balances; disabled events have `remainingAfterGrams: null`. |
+| `GET /api/spools/{id}/events` | List history with running balances; disabled events have `remainingAfterGrams: null`. Events created by a project print additionally carry `projectPrintId` and the resolved owning `projectId` (both `null` for regular events). |
 | `POST /api/spools/{id}/open` | Open a sealed spool. |
 | `POST /api/spools/{id}/consume` | Record `{ grams, projectName?, projectUrl?, notes? }`. |
 | `POST /api/spools/{id}/adjust` | Set `{ newRemainingGrams, notes? }`. |
@@ -37,6 +48,16 @@ The API uses JSON and serializes enum values as strings. Successful mutations no
 | `POST /api/spools/{id}/events/{eventId}/disable` | Undo an event subject to lifecycle guards. |
 | `POST /api/spools/{id}/events/{eventId}/enable` | Redo an event subject to lifecycle guards. |
 | `POST /api/spools/reevaluate` | Repair cached state for all spools from their histories. |
+| `GET /api/print-projects` | List print projects with their effective date, ordered newest first (ties by title A–Z, then ID); `includeArchived=true` also returns archived projects. |
+| `GET /api/print-projects/{id}` | Read a project including its defined types with grams and its project prints (the only endpoint that populates prints). |
+| `POST /api/print-projects` | Create a project from `{ title, description?, url?, types: [{ filamentTypeId, grams }] }`; the server assigns its UUID v7 ID. |
+| `PUT /api/print-projects/{id}` | Replace a project's definition with the same body; rejected while the project is archived. |
+| `POST /api/print-projects/{id}/archive` | Archive the project, setting the archived flag and timestamp. |
+| `POST /api/print-projects/{id}/unarchive` | Unarchive the project, clearing the archived flag and timestamp. |
+| `DELETE /api/print-projects/{id}` | Delete the project, all of its prints (including undone ones), and the linked spool events; allowed only when archived and without enabled prints. |
+| `POST /api/print-projects/{id}/prints` | Confirm a print from `{ spools: [{ spoolId, grams }] }` (one entry per defined type); consumes the selected spools, auto-opens any sealed one, and returns the created project print. |
+| `POST /api/print-projects/{id}/prints/{printId}/undo` | Disable the project print and all of its linked spool events. |
+| `POST /api/print-projects/{id}/prints/{printId}/redo` | Re-enable the project print and its spool events, subject to the spool lifecycle guards. |
 | `GET /api/dashboard/summary` | Return type, active-spool, finished-spool, and active-remaining totals. |
 | `GET /api/dashboard/usage?days=30` | Return a zero-filled, consecutive per-day series: `consumedGrams` (enabled prints only) and `totalStockGrams` (reconstructed remaining grams on non-finished spools) for every day of the window; `days` is clamped to 1-365. |
 | `GET /api/labels?id=ABCD&id=EFGH&copies=K` | Download labels for one or more existing spool IDs; optional `copies` (whole number 1–10, default 1) prints K identical copies per spool. |
@@ -84,6 +105,6 @@ On the `/spools` page, "Print labels (N)" opens an in-page dialog instead of dir
 
 Clients connect to `GET /ws/changes` as a WebSocket. Any text frame containing `ping` is answered with `{"type":"pong"}`; the SPA sends a ping every 20 seconds and reconnects after failures using exponential backoff from approximately 2 seconds up to 30 seconds.
 
-After an inventory mutation, the server broadcasts `{"type":"change","resource":"spool|filament-type","id":"..."}`. Views reload their relevant data on receipt. During graceful API shutdown, the server sends `{"type":"server-shutdown"}`, closes sockets, and the client polls `/api/version` every five seconds. A changed version triggers a page reload; an unchanged version resumes the UI.
+After an inventory mutation, the server broadcasts `{"type":"change","resource":"spool|filament-type|print-project","id":"..."}`. Views reload their relevant data on receipt. During graceful API shutdown, the server sends `{"type":"server-shutdown"}`, closes sockets, and the client polls `/api/version` every five seconds. A changed version triggers a page reload; an unchanged version resumes the UI.
 
 Every HTTP response includes `X-App-Version`. Deploy builds stamp both frontend and backend from the current Git description; dirty builds include a deterministic hash of the uncommitted diff.

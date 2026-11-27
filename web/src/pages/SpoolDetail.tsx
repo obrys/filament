@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router'
 import { api, type Spool, type SpoolEvent, type FilamentType } from '../api/client'
 import { onChange } from '../realtime/useChangeStream'
 import { SpoolViz } from '../components/SpoolViz'
@@ -9,6 +9,9 @@ import { IconAlert, IconArrowLeft, IconCheck, IconHistory, IconPrinter, IconScal
 export function SpoolDetail() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const highlight = params.get('highlight')
+  const highlightRef = useRef<HTMLTableRowElement>(null)
   const [spool, setSpool] = useState<Spool | null>(null)
   const [type, setType] = useState<FilamentType | null>(null)
   const [events, setEvents] = useState<SpoolEvent[]>([])
@@ -25,6 +28,15 @@ export function SpoolDetail() {
     load()
     return onChange(m => { if (m.resource === 'spool' && (!m.id || m.id === id)) load() })
   }, [id])
+
+  // Row highlight from ?highlight=<eventId> (set when following a project print link):
+  // mark the history row and scroll it into view once the events have loaded.
+  useEffect(() => {
+    if (highlight && highlightRef.current) {
+      highlightRef.current.scrollIntoView({ block: 'center' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlight, events.length])
 
   if (!spool || !type) return <p className="muted">Loading…</p>
 
@@ -158,29 +170,46 @@ export function SpoolDetail() {
         <table>
           <thead><tr><th>When</th><th>Kind</th><th>Δ</th><th>After</th><th>Project</th><th>Notes</th><th></th></tr></thead>
           <tbody>
-            {events.map(e => (
-              <tr key={e.id} className={e.isDisabled ? 'event-disabled' : undefined}>
-                <td data-label="When" className="muted mono">{new Date(e.occurredAt).toLocaleString()}</td>
-                <td data-label="Kind"><span className={`ev ev--${e.kind.toLowerCase()}`}>{e.kind}</span></td>
-                <td data-label="Δ" className={`num ${e.deltaGrams < 0 ? 'is-neg' : e.deltaGrams > 0 ? 'is-pos' : ''}`}>
-                  {e.deltaGrams > 0 ? '+' : ''}{e.deltaGrams} g
-                </td>
-                <td data-label="After" className="num">{e.remainingAfterGrams === null ? '—' : `${e.remainingAfterGrams} g`}</td>
-                <td data-label="Project">
-                  {e.projectUrl
-                    ? <a href={e.projectUrl} target="_blank" rel="noreferrer">{e.projectName ?? e.projectUrl}</a>
-                    : (e.projectName ?? '')}
-                </td>
-                <td data-label="Notes" className="muted">{e.notes ?? ''}</td>
-                <td data-label="">
-                  {e.kind !== 'Created' && (
-                    e.isDisabled
-                      ? <button className="link" onClick={() => act(() => api.spools.enableEvent(spool.id, e.id))}>Redo</button>
-                      : <button className="link" onClick={() => act(() => api.spools.disableEvent(spool.id, e.id))}>Undo</button>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {events.map(e => {
+              // Project-linked rows: the project title links back to the project detail (with the
+              // print highlighted), the row is visually distinguished, and undo/redo lives only on
+              // the project page.
+              const isProjectRow = e.projectPrintId !== null && e.projectPrintId !== undefined
+              return (
+                <tr key={e.id}
+                  ref={e.id === Number(highlight) ? highlightRef : undefined}
+                  className={[
+                    e.isDisabled ? 'event-disabled' : '',
+                    isProjectRow ? 'event--project' : '',
+                    e.id === Number(highlight) ? 'is-highlighted' : '',
+                  ].join(' ').trim()}
+                  data-testid={e.id === Number(highlight) ? 'highlighted-event' : undefined}>
+                  <td data-label="When" className="muted mono">{new Date(e.occurredAt).toLocaleString()}</td>
+                  <td data-label="Kind"><span className={`ev ev--${e.kind.toLowerCase()}`}>{e.kind}</span></td>
+                  <td data-label="Δ" className={`num ${e.deltaGrams < 0 ? 'is-neg' : e.deltaGrams > 0 ? 'is-pos' : ''}`}>
+                    {e.deltaGrams > 0 ? '+' : ''}{e.deltaGrams} g
+                  </td>
+                  <td data-label="After" className="num">{e.remainingAfterGrams === null ? '—' : `${e.remainingAfterGrams} g`}</td>
+                  <td data-label="Project">
+                    {isProjectRow
+                      ? (e.projectId
+                          ? <Link to={`/print-projects/${e.projectId}?highlight=${e.projectPrintId}`}>{e.projectName ?? e.projectPrintId}</Link>
+                          : (e.projectName ?? ''))
+                      : (e.projectUrl
+                          ? <a href={e.projectUrl} target="_blank" rel="noreferrer">{e.projectName ?? e.projectUrl}</a>
+                          : (e.projectName ?? ''))}
+                  </td>
+                  <td data-label="Notes" className="muted">{e.notes ?? ''}</td>
+                  <td data-label="">
+                    {e.kind !== 'Created' && !isProjectRow && (
+                      e.isDisabled
+                        ? <button className="link" onClick={() => act(() => api.spools.enableEvent(spool.id, e.id))}>Redo</button>
+                        : <button className="link" onClick={() => act(() => api.spools.disableEvent(spool.id, e.id))}>Undo</button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

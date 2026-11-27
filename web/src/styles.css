@@ -1278,6 +1278,58 @@ a.id-pill:hover { background: var(--accent); color: var(--accent-ink); }
   }
 }
 
+/* ---------- Print projects (008) ---------- */
+
+/* Archived badge: neutral, reads as "stored away" rather than a state color. */
+.badge--archived { color: var(--muted); background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--border-strong); }
+
+.form-error { color: var(--danger); background: var(--danger-wash); border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); border-radius: var(--r-sm); padding: 0.5rem 0.75rem; margin: 0.5rem 0 0; }
+
+.project-title { font-weight: 700; }
+
+/* Type line inside the shared project form: type select (wide) + grams (narrow) + remove. */
+.grid--type-line { grid-template-columns: 1fr 7.5rem 2.25rem; align-items: end; }
+@media (max-width: 720px) { .grid--type-line { grid-template-columns: 1fr 6rem; } }
+
+/* Detail page: description under the hero title, and a softer delete-zone card. */
+.project-description { color: var(--muted); margin: 0.5rem 0 0; white-space: pre-wrap; }
+.button-link { display: inline-flex; align-items: center; gap: 0.4rem; }
+
+/* History rows created by a print project: tinted background so they stand out; undo/redo is withheld on them. */
+tr.event--project { background: var(--accent-wash); }
+tr.event--project td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* Row highlight when arriving via ?highlight=… (project print ↔ spool event cross-links). */
+tr.is-highlighted { animation: row-flash 2.4s ease-out 1; }
+@keyframes row-flash {
+  0% { background: var(--accent-wash); box-shadow: inset 0 0 0 1px var(--accent-ring); }
+  100% { background: transparent; box-shadow: none; }
+}
+
+/* Print page: one slot card per defined filament type. */
+.project-slot { margin-top: 1rem; }
+.project-slot__head { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+.project-slot__head label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--muted); }
+.project-slot__head input { width: 5rem; }
+.project-slot__spools { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.spool-pick {
+  display: inline-flex; align-items: center; gap: 0.6rem;
+  padding: 0.4rem 0.65rem; border-radius: var(--r);
+  border: 1px solid var(--border); background: var(--bg-elevated); color: var(--fg);
+  cursor: pointer; transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.spool-pick:hover { border-color: var(--border-strong); }
+.spool-pick--selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); background: var(--accent-wash); }
+.spool-pick__meta { display: inline-flex; align-items: center; gap: 0.5rem; }
+
+/* "Other spools" dialogue: reuses the version-overlay + print-dialog chrome, wider for the table. */
+.print-dialog--wide { width: min(860px, 100%); }
+tr.clickable-row { cursor: pointer; }
+tr.clickable-row:hover td { background: var(--accent-wash); }
+
+.link--danger { color: var(--danger); }
+.link--danger:hover { color: var(--danger); text-decoration: underline; }
+
 /* Scrollbars that match the theme instead of the OS default. */
 * { scrollbar-color: var(--surface-3) transparent; scrollbar-width: thin; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }

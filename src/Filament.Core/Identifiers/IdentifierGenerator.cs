@@ -16,6 +16,13 @@ public static class IdentifierGenerator
     public static string NewTypeId() => Generate(TypeIdLength);
     public static string NewSpoolId() => Generate(SpoolIdLength);
 
+    /// <summary>
+    /// Print projects and project prints use UUID v7 (time-ordered, sortable) — no short
+    /// display ids are introduced for them.
+    /// </summary>
+    public static string NewProjectId() => Guid.CreateVersion7().ToString("D");
+    public static string NewProjectPrintId() => Guid.CreateVersion7().ToString("D");
+
     public static string Generate(int length)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(length);

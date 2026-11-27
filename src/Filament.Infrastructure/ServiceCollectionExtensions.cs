@@ -24,6 +24,7 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IFilamentTypeRepository, FilamentTypeRepository>();
         services.AddScoped<ISpoolRepository, SpoolRepository>();
+        services.AddScoped<IPrintProjectRepository, PrintProjectRepository>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
 
         return services;

@@ -9,6 +9,7 @@ The intended scale is approximately 50-150 filament types, 50-300 spools, and up
 - A **filament type** is a reusable catalogue entry: brand, material, product type/finish, colour, optional hex colour, default net weight, and empty-spool weight.
 - A **spool** is one physical instance of a filament type. It has its own short ID, initial net weight, optional empty-spool-weight override, status, notes, and append-only operational history.
 - **Events** record creation, opening, individual prints, weighed adjustments, and finishing. The live status and remaining material are derived from enabled events, so history remains auditable and an event can be undone or redone safely.
+- A **print project** is a reusable pattern for a known print: a title, optional description, optional URL, and one or more filament types with expected grams. Printing a project consumes the selected spools and records a project print linking the created spool events, so a whole print can later be undone or redone as one unit.
 
 ## User capabilities
 
@@ -17,6 +18,8 @@ The intended scale is approximately 50-150 filament types, 50-300 spools, and up
 - Open a spool; record each print with grams consumed and optional project name and URL; set the remaining amount from a measured value; and explicitly finish or reopen it.
 - Delete a spool and its event history from its detail page; the action becomes enabled only once every non-creation event of the spool has been undone.
 - Review per-spool history, including running material balance and undone entries.
+- Maintain print projects: create and edit them (title, description, URL, filament types with grams), archive and unarchive them, and delete an archived project once all of its prints are undone.
+- Print a project in one flow: choose a spool for each defined filament type (with an "other spools" dialogue), adjust the pre-filled grams, and confirm to consume the spools; undo or redo a whole project print from the project page.
 - Filter types and spools by brand, material, product type, and colour; select multiple spools; and download a printable label PDF with a chosen number of identical copies per spool.
 - Sort the spool list by last used (default), least remaining, or most remaining. Sorting is performed by the backend and the active sort is reflected in the `/spools` URL.
 - See dashboard counts, active remaining stock, and a two-line consumption graph over the last 30 UTC days: per-day total stock (remaining grams on non-finished spools) and per-day consumed filament (enabled prints only), zero-filled for days without events, with a hover/tap readout of the exact per-day values. The "Used (30 d)" and "Busiest day" figures are derived from the consumed (prints-only) line.

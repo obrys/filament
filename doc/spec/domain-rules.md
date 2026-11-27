@@ -6,6 +6,9 @@
 erDiagram
     FILAMENT_TYPE ||--o{ SPOOL : categorizes
     SPOOL ||--|{ SPOOL_EVENT : records
+    PRINT_PROJECT ||--|{ PRINT_PROJECT_TYPE : defines
+    PRINT_PROJECT ||--o{ PROJECT_PRINT : has
+    PROJECT_PRINT ||--o{ SPOOL_EVENT : "consumes via"
     FILAMENT_TYPE {
         string id PK
         string brand
@@ -38,13 +41,37 @@ erDiagram
         int deltaGrams
         bool isDisabled
         datetime occurredAt
+        string projectPrintId "optional FK"
         string projectName "optional"
         string projectUrl "optional"
         string notes "optional"
     }
+    PRINT_PROJECT {
+        string id PK "UUID v7"
+        string title "max 256"
+        string description "optional, max 1024"
+        string url "optional, max 1024"
+        bool isArchived
+        datetime archivedAt "optional"
+        datetime createdAt
+    }
+    PRINT_PROJECT_TYPE {
+        string id PK
+        string projectId FK
+        string filamentTypeId FK "unique per project"
+        int grams "positive whole"
+    }
+    PROJECT_PRINT {
+        string id PK "UUID v7"
+        string projectId FK
+        datetime occurredAt
+        bool isDisabled
+    }
 ```
 
 A filament type represents a product/category, not stock. Multiple physical spools can share it. A spool cannot outlive its type in normal application operations: type deletion is rejected while it has any spools. Deleting a spool is allowed and deletes its events through the database foreign-key cascade; this is intended only for an incorrectly created spool.
+
+Print projects reference filament types in the other direction: deleting a type removes its definition line from every project that lists it, and the project keeps working with its remaining types. Deleting a project cascades to its project prints; the linked spool events are deleted by the application before the prints, because the events' reference to a project print is restrictive.
 
 All weights are integer grams. The database limits type IDs and spool IDs to eight characters although generated IDs have fixed shorter lengths. Notes are limited to 1,024 characters; a print project name is limited to 256 characters and its URL to 1,024 characters.
 
@@ -56,6 +83,8 @@ Filament assigns random, uppercase identifiers and retries on the extremely unli
 |---|---:|---|---:|
 | Filament type | 3 | `0123456789ABCDEFGHJKMNPQRSTVWXYZ` | 32,768 |
 | Spool | 4 | `0123456789ABCDEFGHJKMNPQRSTVWXYZ` | 1,048,576 |
+
+Print projects and project prints do not use short display IDs; they are identified by UUID v7 (36-character, time-ordered) strings.
 
 The alphabet is Crockford-Base32-like and omits visually confusing letters. For user-entered lookup normalization, whitespace, hyphens, and underscores are ignored; `I` and `L` normalize to `1`, `O` to `0`, and `U` to `V`. Stored/generated values are uppercase. Current HTTP path lookup uses the supplied ID directly, so API clients should send the stored canonical value.
 
@@ -106,6 +135,21 @@ The UI gives Finish visual emphasis at or below 5% of the initial net weight, bu
 - Facet counts ignore their own facet's selection while applying all other selections. All values in the unfiltered universe are shown, including zero-count options, ordered by count descending then lexical value ascending.
 - A spool inherits its facet attributes from its filament type. An unresolved type is omitted from a spool-list facet universe.
 - The spool list is sorted server-side by a `sort` query parameter on `GET /api/spools` with values `lastUsed` (default), `leastRemaining`, or `mostRemaining`; missing or unknown values resolve to `lastUsed` without error. After the chosen key a fixed secondary order (`lastUsedAt` descending, then `id` ascending) keeps results stable. Sorting applies after facet filtering and does not change facet counts; finished spools, when included, sort by the same rules as active spools. See [Interfaces](interfaces.md#spool-list-sorting) and the completed [001-sorting](../done/001-sorting/) change request.
+
+## Print projects
+
+A print project is a reusable pattern for a known print: a required title (max 256 characters), an optional multi-line description (max 1,024), an optional URL (max 1,024), and one or more filament type lines, each with a positive whole number of grams. A type appears at most once in a definition; every other validation violation is rejected with a 400.
+
+- **Effective date and list order.** A project's effective date is its `archivedAt` when archived, else its newest enabled project print, else its creation date; undone prints do not count. The list orders by the effective date, newest first, ties broken by title A–Z, then project ID. The ordering is computed in memory (single-user scale).
+- **Editing.** Editing replaces title, description, URL, and the type lines. Type and grams changes affect only future prints (the pre-filled print-page values); existing project prints keep their recorded spools and grams. An archived project cannot be edited.
+- **Archive and unarchive.** Archiving sets the archived flag and timestamp; unarchiving clears both. An archived project is read-only except for unarchiving: no printing, editing, or undo/redo of its prints.
+- **Delete.** Only an archived project with no enabled project prints can be deleted. Deletion removes the project, all of its project prints (including undone ones), and the linked spool events; spool balances and history stay consistent afterwards.
+- **Planning a print.** A print selection has exactly one slot per defined type (no skipping); every slot names a spool with at least 1 g. For each spool, the grams summed across all of its slots must not exceed its current remaining balance. Finished spools are rejected; a sealed spool is allowed and is auto-opened by the print at the print's date/time (the deliberate application-level use of the legacy sealed-print rule). The same spool may back several slots with separate grams, producing several print events with the same date/time on that spool; the existing chronological tie-break order applies. All validation precedes any write, so a rejected print changes nothing.
+- **Project prints and undo/redo.** A project print is created with the confirmation date/time and one `Print` event per selected spool; all events share that date/time and reference the print. A project print is immutable once created. Undo disables the print and all of its linked spool events together: the spool history rows display as undone and the balances are restored. Redo re-enables them; if a spool lifecycle guard rejects the redo (for example, the spool's `Opened` event was undone in the meantime), a clear error is shown and nothing changes — the print stays undone.
+- **Interaction with the rest of the ledger.** Project prints are ordinary enabled print events: they lower remaining grams, update the spool's `lastUsedAt`, and count toward the dashboard's 30-day consumption; undoing them removes them from consumption again.
+- **Spool history integration.** A spool event created by a project print carries its project-print reference, and the spool event list resolves the owning project's ID. In the UI such rows display the project title as a link, are visually distinguished, and have no undo/redo controls — undo/redo of a project print exists only on the project page.
+
+See the completed [008 print project](../done/008-print-project/) change request for the full specification and rationale.
 
 ## Derived-cache repair
 

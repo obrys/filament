@@ -49,10 +49,17 @@ function toUtcSql(dt: Date): string {
   return dt.toISOString().replace('T', ' ').slice(0, 23)
 }
 
-/** Wipes all inventory rows (in FK order) so tests start from — and leave — a clean database. */
+/**
+ * Wipes all inventory rows (in FK order) so tests start from — and leave — a clean database.
+ * spool_events goes first: its ProjectPrintId reference to project_prints is restrict, so the
+ * project side can only be cleared once the events are gone.
+ */
 export async function resetInventory(): Promise<void> {
   const p = await db()
   await p.query('DELETE FROM spool_events')
+  await p.query('DELETE FROM print_project_types')
+  await p.query('DELETE FROM project_prints')
+  await p.query('DELETE FROM print_projects')
   await p.query('DELETE FROM spools')
   await p.query('DELETE FROM filament_types')
 }
@@ -68,6 +75,10 @@ async function ensureType(
   typeId: string,
   defaultNetWeightGrams: number,
   emptySpoolWeightGrams: number,
+  brand = 'SeedBrand',
+  material = 'PLA',
+  type = 'SeedType',
+  color = 'SeedColor',
 ): Promise<void> {
   const [rows] = await p.query('SELECT Id FROM filament_types WHERE Id = ?', [typeId])
   if ((rows as unknown[]).length > 0) return
@@ -75,18 +86,35 @@ async function ensureType(
     `INSERT INTO filament_types
       (Id, Brand, Material, Type, Color, ColorHex, DefaultNetWeightGrams, EmptySpoolWeightGrams, Notes, CreatedAt)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
-    [typeId, 'SeedBrand', 'PLA', 'SeedType', 'SeedColor', '#ff7a18', defaultNetWeightGrams, emptySpoolWeightGrams, toUtcSql(new Date())],
+    [typeId, brand, material, type, color, '#ff7a18', defaultNetWeightGrams, emptySpoolWeightGrams, toUtcSql(new Date())],
   )
 }
 
-/** Inserts a filament type row directly, so it can be picked in the UI creation flow. */
+/**
+ * Inserts a filament type row directly, so it can be picked in the UI creation flow. Facet
+ * fields default to the shared seed values; override them when a test needs distinguishable
+ * facet values (e.g. to exercise the facet filters).
+ */
 export async function seedType(opts: {
   id: string
   defaultNetWeightGrams?: number
   emptySpoolWeightGrams?: number
+  brand?: string
+  material?: string
+  type?: string
+  color?: string
 }): Promise<void> {
   const p = await db()
-  await ensureType(p, opts.id, opts.defaultNetWeightGrams ?? 1000, opts.emptySpoolWeightGrams ?? 200)
+  await ensureType(
+    p,
+    opts.id,
+    opts.defaultNetWeightGrams ?? 1000,
+    opts.emptySpoolWeightGrams ?? 200,
+    opts.brand,
+    opts.material,
+    opts.type,
+    opts.color,
+  )
 }
 
 /**
@@ -116,9 +144,85 @@ export async function seedSpool(opts: {
   for (const e of opts.events) {
     await p.query(
       `INSERT INTO spool_events (SpoolId, Kind, DeltaGrams, IsDisabled, OccurredAt)
-       VALUES (?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?)`,
       [opts.id, KIND_VALUE[e.kind], e.deltaGrams, e.disabled ? 1 : 0, toUtcSql(e.occurredAt)],
     )
   }
   await reevaluate()
+}
+
+/**
+ * Inserts a print project (and its type lines) directly. Every referenced filament type is
+ * created on demand, so this composes with unseeded type ids. `id` defaults to a slug of the
+ * title so tests can address the project without tracking the generated value.
+ */
+export async function seedPrintProject(opts: {
+  id?: string
+  title: string
+  description?: string
+  url?: string
+  archived?: boolean
+  archivedAt?: Date
+  createdAt: Date
+  types: { typeId: string; grams: number }[]
+}): Promise<string> {
+  const p = await db()
+  for (const t of opts.types) await ensureType(p, t.typeId, 1000, 200)
+  const id = opts.id ?? `PP-${opts.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`
+  await p.query('DELETE FROM print_project_types WHERE ProjectId = ?', [id])
+  await p.query('DELETE FROM project_prints WHERE ProjectId = ?', [id])
+  await p.query('DELETE FROM print_projects WHERE Id = ?', [id])
+  await p.query(
+    `INSERT INTO print_projects
+       (Id, Title, Description, Url, IsArchived, ArchivedAt, CreatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [id, opts.title, opts.description ?? null, opts.url ?? null,
+     opts.archived ? 1 : 0, opts.archived ? toUtcSql(opts.archivedAt ?? opts.createdAt) : null,
+     toUtcSql(opts.createdAt)],
+  )
+  for (const t of opts.types) {
+    await p.query(
+      'INSERT INTO print_project_types (ProjectId, FilamentTypeId, Grams) VALUES (?, ?, ?)',
+      [id, t.typeId, t.grams],
+    )
+  }
+  return id
+}
+
+/**
+ * Inserts a project print plus its linked spool Print event (the row a confirmed project print
+ * would create) and re-evaluates, so cached spool state reflects the consumption. The spool must
+ * already exist. `printId` defaults to a fresh id derived from the project and a row counter.
+ */
+export async function seedProjectPrint(opts: {
+  projectId: string
+  printId?: string
+  spoolId: string
+  grams: number
+  occurredAt: Date
+  disabled?: boolean
+}): Promise<string> {
+  const p = await db()
+  const [titleRows] = await p.query('SELECT Title FROM print_projects WHERE Id = ?', [opts.projectId])
+  const title = (titleRows as Array<{ Title: string }>)[0]?.Title
+  if (title === undefined) throw new Error(`seedProjectPrint: unknown project ${opts.projectId}`)
+
+  const [countRows] = await p.query('SELECT COUNT(*) AS n FROM project_prints WHERE ProjectId = ?', [opts.projectId])
+  const n = (countRows as Array<{ n: number }>)[0].n
+  const printId = opts.printId ?? `PPR-${opts.projectId}-${n}`
+
+  await p.query('DELETE FROM spool_events WHERE ProjectPrintId = ?', [printId])
+  await p.query('DELETE FROM project_prints WHERE Id = ?', [printId])
+  await p.query(
+    `INSERT INTO project_prints (Id, ProjectId, OccurredAt, IsDisabled) VALUES (?, ?, ?, ?)`,
+    [printId, opts.projectId, toUtcSql(opts.occurredAt), opts.disabled ? 1 : 0],
+  )
+  await p.query(
+    `INSERT INTO spool_events (SpoolId, Kind, DeltaGrams, IsDisabled, OccurredAt, ProjectName, ProjectPrintId)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [opts.spoolId, KIND_VALUE.Print, -opts.grams, opts.disabled ? 1 : 0, toUtcSql(opts.occurredAt),
+     title, printId],
+  )
+  await reevaluate()
+  return printId
 }

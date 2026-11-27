@@ -98,6 +98,7 @@ internal static class EntityMapping
         ProjectUrl = e.ProjectUrl,
         Notes = e.Notes,
         IsDisabled = e.IsDisabled,
+        ProjectPrintId = e.ProjectPrintId,
         OccurredAt = e.OccurredAt,
     };
 
@@ -110,6 +111,64 @@ internal static class EntityMapping
         ProjectUrl = d.ProjectUrl,
         Notes = d.Notes,
         IsDisabled = d.IsDisabled,
+        ProjectPrintId = d.ProjectPrintId,
         OccurredAt = d.OccurredAt,
+    };
+
+    public static PrintProject ToDomain(this PrintProjectEntity e) => new()
+    {
+        Id = e.Id,
+        Title = e.Title,
+        Description = e.Description,
+        Url = e.Url,
+        IsArchived = e.IsArchived,
+        ArchivedAt = e.ArchivedAt,
+        CreatedAt = e.CreatedAt,
+        Types = e.Types.Select(t => t.ToDomain()).ToList(),
+        Prints = e.Prints.Select(p => p.ToDomain()).ToList(),
+    };
+
+    public static PrintProjectEntity ToEntity(this PrintProject d) => new()
+    {
+        Id = d.Id,
+        Title = d.Title,
+        Description = d.Description,
+        Url = d.Url,
+        IsArchived = d.IsArchived,
+        ArchivedAt = d.ArchivedAt,
+        CreatedAt = d.CreatedAt,
+        Types = d.Types.Select(t => t.ToEntity(d.Id)).ToList(),
+        Prints = d.Prints.Select(p => p.ToEntity(d.Id)).ToList(),
+    };
+
+    public static PrintProjectType ToDomain(this PrintProjectTypeEntity e) => new()
+    {
+        FilamentTypeId = e.FilamentTypeId,
+        Grams = e.Grams,
+    };
+
+    public static PrintProjectTypeEntity ToEntity(this PrintProjectType t, string projectId) => new()
+    {
+        ProjectId = projectId,
+        FilamentTypeId = t.FilamentTypeId,
+        Grams = t.Grams,
+    };
+
+    public static ProjectPrint ToDomain(this ProjectPrintEntity e) => new()
+    {
+        Id = e.Id,
+        ProjectId = e.ProjectId,
+        OccurredAt = e.OccurredAt,
+        IsDisabled = e.IsDisabled,
+        Events = e.Events.Select(ev => ev.ToDomain()).ToList(),
+    };
+
+    public static ProjectPrintEntity ToEntity(this ProjectPrint p, string projectId) => new()
+    {
+        Id = p.Id,
+        ProjectId = projectId,
+        OccurredAt = p.OccurredAt,
+        IsDisabled = p.IsDisabled,
+        Events = p.Events.Select(ev => ev.ToEntity()).ToList(),
     };
 }

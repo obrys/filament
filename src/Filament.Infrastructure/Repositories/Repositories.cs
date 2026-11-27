@@ -1,5 +1,6 @@
 using Filament.Core.Abstractions;
 using Filament.Core.Domain;
+using Filament.Core.Identifiers;
 using Filament.Core.Services;
 using Filament.Infrastructure.Entities;
 using Filament.Infrastructure.Mapping;
@@ -188,6 +189,228 @@ public sealed class SpoolRepository : ISpoolRepository
         await _db.SaveChangesAsync(ct);
         return report;
     }
+
+    private static void ApplyState(SpoolEntity spool, SpoolState state)
+    {
+        spool.Status = (int)state.Status;
+        spool.RemainingGrams = state.RemainingGrams;
+        spool.OpenedAt = state.OpenedAt;
+        spool.FinishedAt = state.FinishedAt;
+        spool.LastUsedAt = state.LastUsedAt;
+    }
+}
+
+public sealed class PrintProjectRepository : IPrintProjectRepository
+{
+    private readonly FilamentDbContext _db;
+    public PrintProjectRepository(FilamentDbContext db) => _db = db;
+
+    public async Task<PrintProject?> GetAsync(string id, CancellationToken ct = default)
+    {
+        var e = await _db.PrintProjects.AsNoTracking()
+            .Include(p => p.Types)
+            .Include(p => p.Prints).ThenInclude(pr => pr.Events)
+            .FirstOrDefaultAsync(x => x.Id == id, ct);
+        return e?.ToDomain();
+    }
+
+    public async Task<IReadOnlyList<PrintProject>> ListAsync(bool includeArchived, CancellationToken ct = default)
+    {
+        var q = _db.PrintProjects.AsNoTracking();
+        if (!includeArchived) q = q.Where(p => !p.IsArchived);
+        var entities = await q
+            .Include(p => p.Types)
+            .Include(p => p.Prints)
+            .ToListAsync(ct);
+        return entities.Select(EntityMapping.ToDomain).ToList();
+    }
+
+    public async Task<PrintProject> CreateAsync(PrintProject project, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        _db.PrintProjects.Add(project.ToEntity());
+        await _db.SaveChangesAsync(ct);
+        return (await GetAsync(project.Id, ct))!;
+    }
+
+    public async Task<PrintProject> UpdateAsync(PrintProject project, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        var e = await _db.PrintProjects.Include(p => p.Types)
+            .FirstOrDefaultAsync(x => x.Id == project.Id, ct)
+            ?? throw new InvalidOperationException($"PrintProject '{project.Id}' not found.");
+        e.Title = project.Title;
+        e.Description = project.Description;
+        e.Url = project.Url;
+        // Replace the definition: delete the old lines and insert the new ones (a type line is a
+        // value, not an entity with its own identity worth diffing at this scale).
+        _db.PrintProjectTypes.RemoveRange(e.Types);
+        e.Types = project.Types.Select(t => t.ToEntity(e.Id)).ToList();
+        await _db.SaveChangesAsync(ct);
+        return (await GetAsync(project.Id, ct))!;
+    }
+
+    public async Task<PrintProject> SetArchivedAsync(string id, bool archived, DateTimeOffset at, CancellationToken ct = default)
+    {
+        var e = await _db.PrintProjects.FirstOrDefaultAsync(x => x.Id == id, ct)
+            ?? throw new InvalidOperationException($"PrintProject '{id}' not found.");
+        e.IsArchived = archived;
+        e.ArchivedAt = archived ? at : null;
+        await _db.SaveChangesAsync(ct);
+        return (await GetAsync(id, ct))!;
+    }
+
+    public async Task<bool> DeleteAsync(string id, CancellationToken ct = default)
+    {
+        var project = await _db.PrintProjects
+            .Include(p => p.Types)
+            .Include(p => p.Prints)
+            .FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (project is null) return false;
+
+        var printIds = project.Prints.Select(p => p.Id).ToList();
+        var removedEvents = await _db.SpoolEvents
+            .Where(e => printIds.Contains(e.ProjectPrintId))
+            .ToListAsync(ct);
+        var spoolIds = removedEvents.Select(e => e.SpoolId).Distinct().ToList();
+
+        // Re-evaluate every touched spool from its remaining (non-removed) events so the cached
+        // state/remaining/last-used stay consistent, mirroring ApplyLifecycleAsync.
+        if (spoolIds.Count > 0)
+        {
+            var remainingEvents = await _db.SpoolEvents
+                .Where(e => spoolIds.Contains(e.SpoolId))
+                .ToListAsync(ct);
+            var spools = await _db.Spools.Where(s => spoolIds.Contains(s.Id)).ToListAsync(ct);
+            var removedIds = removedEvents.Select(e => e.Id).ToHashSet();
+            foreach (var spool in spools)
+            {
+                var kept = remainingEvents
+                    .Where(e => e.SpoolId == spool.Id && !removedIds.Contains(e.Id))
+                    .Select(EntityMapping.ToDomain)
+                    .ToList();
+                ApplyState(spool, SpoolLifecycle.Evaluate(spool.InitialNetGrams, kept));
+            }
+        }
+
+        _db.SpoolEvents.RemoveRange(removedEvents);
+        _db.PrintProjects.Remove(project); // cascades to its prints and type lines
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<ProjectPrint> PrintAsync(
+        string projectId, IReadOnlyList<PrintSelection> selection, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        var project = await _db.PrintProjects
+            .Include(p => p.Types)
+            .FirstOrDefaultAsync(x => x.Id == projectId, ct)
+            ?? throw new InvalidOperationException($"PrintProject '{projectId}' not found.");
+
+        var spoolIds = selection.Select(s => s.SpoolId).Distinct().ToList();
+        var spools = await _db.Spools.Where(s => spoolIds.Contains(s.Id)).ToListAsync(ct);
+        var events = await _db.SpoolEvents.Where(e => spoolIds.Contains(e.SpoolId)).ToListAsync(ct);
+
+        // All validation/planning happens before any row is modified, so a rejected print changes nothing.
+        var spoolMap = spools.ToDictionary(s => s.Id);
+        var contexts = spoolIds
+            .Select(id => new SpoolWithEvents(
+                spoolMap.TryGetValue(id, out var s) ? s.ToDomain() : throw new InvalidOperationException($"Spool '{id}' not found."),
+                events.Where(e => e.SpoolId == id).Select(EntityMapping.ToDomain).ToList()))
+            .ToList();
+        var occurredAt = DateTimeOffset.UtcNow;
+        var plans = PrintProjectRules.PlanPrint(project.ToDomain(), selection, contexts, occurredAt);
+
+        var print = new ProjectPrintEntity
+        {
+            Id = IdentifierGenerator.NewProjectPrintId(),
+            ProjectId = projectId,
+            OccurredAt = occurredAt,
+        };
+        _db.ProjectPrints.Add(print);
+        var newEvents = new List<SpoolEventEntity>(plans.Count);
+        foreach (var plan in plans)
+        {
+            var entity = plan.EventToAdd!.ToEntity();
+            entity.ProjectPrintId = print.Id;
+            newEvents.Add(entity);
+            _db.SpoolEvents.Add(entity);
+        }
+
+        foreach (var spool in spools)
+        {
+            var all = events
+                .Where(e => e.SpoolId == spool.Id)
+                .Concat(newEvents.Where(e => e.SpoolId == spool.Id))
+                .Select(EntityMapping.ToDomain)
+                .ToList();
+            ApplyState(spool, SpoolLifecycle.Evaluate(spool.InitialNetGrams, all));
+        }
+
+        await _db.SaveChangesAsync(ct);
+        var saved = await _db.ProjectPrints.AsNoTracking()
+            .Include(p => p.Events)
+            .FirstOrDefaultAsync(p => p.Id == print.Id, ct);
+        return saved!.ToDomain();
+    }
+
+    public async Task<ProjectPrint> SetPrintEnabledAsync(
+        string projectId, string printId, bool enabled, CancellationToken ct = default)
+    {
+        var project = await _db.PrintProjects
+            .Include(p => p.Prints)
+            .FirstOrDefaultAsync(x => x.Id == projectId, ct)
+            ?? throw new InvalidOperationException($"PrintProject '{projectId}' not found.");
+        PrintProjectRules.EnsureNotArchived(project.ToDomain(), enabled ? "redone" : "undone");
+        var print = project.Prints.FirstOrDefault(p => p.Id == printId)
+            ?? throw new InvalidOperationException($"ProjectPrint '{printId}' not found.");
+
+        var printEvents = await _db.SpoolEvents
+            .Where(e => e.ProjectPrintId == printId)
+            .ToListAsync(ct);
+        var spoolIds = printEvents.Select(e => e.SpoolId).Distinct().ToList();
+        var spools = await _db.Spools.Where(s => spoolIds.Contains(s.Id)).ToListAsync(ct);
+        var allEvents = await _db.SpoolEvents
+            .Where(e => spoolIds.Contains(e.SpoolId))
+            .ToListAsync(ct);
+
+        // Plan every event's toggle against the current state BEFORE mutating anything, so a
+        // rejected redo (e.g. the spool's Open event was undone in the meantime) changes nothing.
+        foreach (var spool in spools)
+        {
+            var domainEvents = allEvents
+                .Where(e => e.SpoolId == spool.Id)
+                .Select(EntityMapping.ToDomain)
+                .ToList();
+            foreach (var ev in printEvents.Where(e => e.SpoolId == spool.Id))
+                SpoolLifecycle.PlanSetEnabled(domainEvents, ev.Id, enabled);
+        }
+
+        foreach (var ev in printEvents)
+            ev.IsDisabled = !enabled;
+        print.IsDisabled = !enabled;
+        foreach (var spool in spools)
+        {
+            var domainEvents = allEvents
+                .Where(e => e.SpoolId == spool.Id)
+                .Select(EntityMapping.ToDomain)
+                .ToList();
+            ApplyState(spool, SpoolLifecycle.Evaluate(spool.InitialNetGrams, domainEvents));
+        }
+
+        await _db.SaveChangesAsync(ct);
+        var saved = await _db.ProjectPrints.AsNoTracking()
+            .Include(p => p.Events)
+            .FirstOrDefaultAsync(p => p.Id == printId, ct);
+        return saved!.ToDomain();
+    }
+
+    public Task<string?> GetProjectIdByPrintIdAsync(string printId, CancellationToken ct = default) =>
+        _db.ProjectPrints.AsNoTracking()
+            .Where(p => p.Id == printId)
+            .Select(p => p.ProjectId)
+            .FirstOrDefaultAsync(ct);
 
     private static void ApplyState(SpoolEntity spool, SpoolState state)
     {
