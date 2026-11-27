@@ -40,6 +40,13 @@ export const IconSpool = (p: IconProps) => (
   </Svg>
 )
 
+export const IconProjects = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3.5 6.9a1.6 1.6 0 0 1 1.6-1.6h4.1l2 2.2h7.7a1.6 1.6 0 0 1 1.6 1.6v8.1a1.6 1.6 0 0 1-1.6 1.6H5.1a1.6 1.6 0 0 1-1.6-1.6Z" />
+    <path d="M7.4 13.1h9.2M7.4 16h5.6" />
+  </Svg>
+)
+
 export const IconSun = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="12" cy="12" r="4.2" />
@@ -138,5 +145,27 @@ export const IconInbox = (p: IconProps) => (
   <Svg {...p}>
     <path d="M3.5 13.5h4l1.3 2.4h6.4l1.3-2.4h4" />
     <path d="M6.1 4.6h11.8a1.6 1.6 0 0 1 1.45.93l2.15 4.6v7.9a1.6 1.6 0 0 1-1.6 1.6H4.1a1.6 1.6 0 0 1-1.6-1.6v-7.9l2.15-4.6a1.6 1.6 0 0 1 1.45-.93Z" />
+  </Svg>
+)
+
+export const IconPencil = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m14.7 5.3 4 4L8 20l-4.6.6L4 16 14.7 5.3Z" />
+    <path d="m12.8 7.2 4 4" />
+  </Svg>
+)
+
+export const IconSearch = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="10.8" cy="10.8" r="6.3" />
+    <path d="m15.4 15.4 4.6 4.6" />
+  </Svg>
+)
+
+export const IconArchive = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3.5" y="4.5" width="17" height="4" rx="0.8" />
+    <path d="M5.5 8.5v9a1.6 1.6 0 0 0 1.6 1.6h9.8a1.6 1.6 0 0 0 1.6-1.6v-9" />
+    <path d="M9.8 12.2h4.4" />
   </Svg>
 )

@@ -55,5 +55,44 @@ internal sealed class SpoolEventEntity
     /// <summary>When true the event is undone: shown struck-through but excluded from derivations.</summary>
     public bool IsDisabled { get; set; }
 
+    /// <summary>Set when the event was created by printing a print project (see ProjectPrintEntity).</summary>
+    public string? ProjectPrintId { get; set; }
+    public ProjectPrintEntity? ProjectPrint { get; set; }
+
     public DateTimeOffset OccurredAt { get; set; }
+}
+
+internal sealed class PrintProjectEntity
+{
+    public string Id { get; set; } = default!;
+    public string Title { get; set; } = default!;
+    public string? Description { get; set; }
+    public string? Url { get; set; }
+    public bool IsArchived { get; set; }
+    public DateTimeOffset? ArchivedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public List<PrintProjectTypeEntity> Types { get; set; } = new();
+    public List<ProjectPrintEntity> Prints { get; set; } = new();
+}
+
+internal sealed class PrintProjectTypeEntity
+{
+    public long Id { get; set; }
+    public string ProjectId { get; set; } = default!;
+    public PrintProjectEntity? Project { get; set; }
+    public string FilamentTypeId { get; set; } = default!;
+    public FilamentTypeEntity? FilamentType { get; set; }
+    public int Grams { get; set; }
+}
+
+internal sealed class ProjectPrintEntity
+{
+    public string Id { get; set; } = default!;
+    public string ProjectId { get; set; } = default!;
+    public PrintProjectEntity? Project { get; set; }
+    public DateTimeOffset OccurredAt { get; set; }
+    public bool IsDisabled { get; set; }
+
+    public List<SpoolEventEntity> Events { get; set; } = new();
 }

@@ -36,10 +36,67 @@ export type SpoolEvent = {
   deltaGrams: number
   remainingAfterGrams: number | null
   isDisabled: boolean
+  /** Set when the event was created by printing a print project (the linked project print id). */
+  projectPrintId?: string | null
+  /** The id of the print project that created this event (null when unresolvable). */
+  projectId?: string | null
   projectName?: string | null
   projectUrl?: string | null
   notes?: string | null
   occurredAt: string
+}
+
+export type PrintProjectType = {
+  filamentTypeId: string
+  brand: string
+  material: string
+  type: string
+  color: string
+  colorHex?: string | null
+  grams: number
+}
+
+export type ProjectPrintEvent = {
+  spoolEventId: number
+  spoolId: string
+  grams: number
+  brand?: string | null
+  material?: string | null
+  type?: string | null
+  color?: string | null
+  colorHex?: string | null
+}
+
+export type ProjectPrint = {
+  id: string
+  occurredAt: string
+  isDisabled: boolean
+  events: ProjectPrintEvent[]
+}
+
+export type PrintProject = {
+  id: string
+  title: string
+  description?: string | null
+  url?: string | null
+  isArchived: boolean
+  archivedAt?: string | null
+  createdAt: string
+  /** Archived date when archived, else the last enabled print, else the creation date. */
+  effectiveAt: string
+  hasEnabledPrints: boolean
+  types: PrintProjectType[]
+  /** Populated on the detail endpoint only. */
+  prints?: ProjectPrint[] | null
+}
+
+export type PrintProjectList = { items: PrintProject[] }
+
+export type PrintProjectBody = {
+  title: string
+  description?: string | null
+  url?: string | null
+  types: { filamentTypeId: string; grams: number }[]
 }
 
 export type SpoolReevalDiff = {
@@ -158,6 +215,24 @@ export const api = {
       if (copies !== undefined) p.append('copies', String(copies))
       return `/api/labels?${p.toString()}`
     },
+  },
+  printProjects: {
+    list: (includeArchived = false) =>
+      http<PrintProjectList>(`/api/print-projects?includeArchived=${includeArchived}`),
+    get: (id: string) => http<PrintProject>(`/api/print-projects/${id}`),
+    create: (body: PrintProjectBody) =>
+      http<PrintProject>('/api/print-projects', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: PrintProjectBody) =>
+      http<PrintProject>(`/api/print-projects/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    archive: (id: string) => http<PrintProject>(`/api/print-projects/${id}/archive`, { method: 'POST' }),
+    unarchive: (id: string) => http<PrintProject>(`/api/print-projects/${id}/unarchive`, { method: 'POST' }),
+    delete: (id: string) => http<void>(`/api/print-projects/${id}`, { method: 'DELETE' }),
+    print: (id: string, spools: { spoolId: string; grams: number }[]) =>
+      http<ProjectPrint>(`/api/print-projects/${id}/prints`, { method: 'POST', body: JSON.stringify({ spools }) }),
+    undoPrint: (id: string, printId: string) =>
+      http<ProjectPrint>(`/api/print-projects/${id}/prints/${printId}/undo`, { method: 'POST' }),
+    redoPrint: (id: string, printId: string) =>
+      http<ProjectPrint>(`/api/print-projects/${id}/prints/${printId}/redo`, { method: 'POST' }),
   },
   dashboard: {
     summary: () => http<DashboardSummary>('/api/dashboard/summary'),

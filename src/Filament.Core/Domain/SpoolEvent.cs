@@ -26,6 +26,13 @@ public sealed class SpoolEvent
     public string? Notes { get; init; }
 
     /// <summary>
+    /// Set when the event was created by printing a print project: the id of the
+    /// <see cref="ProjectPrint"/> that created it. Such events are undone/redone together with
+    /// their project print, never individually.
+    /// </summary>
+    public string? ProjectPrintId { get; init; }
+
+    /// <summary>
     /// When true the event is "undone": it is displayed (struck through) but excluded from every
     /// derivation — state, remaining weight and per-event running totals. Toggling this flag is the
     /// undo/redo mechanism. The <see cref="SpoolEventKind.Created"/> event can never be disabled.

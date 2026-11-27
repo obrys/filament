@@ -47,6 +47,48 @@ public sealed record SpoolReevaluation(
     public bool Changed => OldStatus != NewStatus || OldRemainingGrams != NewRemainingGrams;
 }
 
+/// <summary>One slot of a project print: the chosen spool and the grams to consume from it.</summary>
+public sealed record PrintSelection(string SpoolId, int Grams);
+
+/// <summary>A spool together with its full event history — the planning input for a project print.</summary>
+public sealed record SpoolWithEvents(Spool Spool, IReadOnlyList<SpoolEvent> Events);
+
+public interface IPrintProjectRepository
+{
+    /// <summary>The full graph: types, prints, and each print's spool events.</summary>
+    Task<PrintProject?> GetAsync(string id, CancellationToken ct = default);
+
+    /// <summary>Projects with types and prints (no events); archived ones only when included.</summary>
+    Task<IReadOnlyList<PrintProject>> ListAsync(bool includeArchived, CancellationToken ct = default);
+
+    Task<PrintProject> CreateAsync(PrintProject project, CancellationToken ct = default);
+    Task<PrintProject> UpdateAsync(PrintProject project, CancellationToken ct = default);
+    Task<PrintProject> SetArchivedAsync(string id, bool archived, DateTimeOffset at, CancellationToken ct = default);
+
+    /// <summary>
+    /// Removes the project, all of its prints (including undone ones) and the linked spool events,
+    /// re-evaluating the touched spools so balances and history stay consistent. False when absent.
+    /// </summary>
+    Task<bool> DeleteAsync(string id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Atomically creates a project print plus one Print spool event per selected spool (a sealed
+    /// spool is auto-opened by the print). All validation happens before any row is modified, so a
+    /// rejected print changes nothing.
+    /// </summary>
+    Task<ProjectPrint> PrintAsync(string projectId, IReadOnlyList<PrintSelection> selection, CancellationToken ct = default);
+
+    /// <summary>
+    /// Atomically disables (undo) or re-enables (redo) a project print and all of its linked spool
+    /// events. A guard rejection (e.g. the spool's Open event was undone in the meantime) changes
+    /// nothing.
+    /// </summary>
+    Task<ProjectPrint> SetPrintEnabledAsync(string projectId, string printId, bool enabled, CancellationToken ct = default);
+
+    /// <summary>The owning project of a project print, or null when the id is unresolvable.</summary>
+    Task<string?> GetProjectIdByPrintIdAsync(string printId, CancellationToken ct = default);
+}
+
 public interface IDashboardRepository
 {
     Task<DashboardSummary> GetSummaryAsync(CancellationToken ct = default);

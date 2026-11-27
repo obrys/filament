@@ -74,7 +74,8 @@ public class SpoolsControllerCreateTests
     private static (SpoolsController controller, FakeSpoolStore store) CreateController()
     {
         var store = new FakeSpoolStore();
-        return (new SpoolsController(store, new FakeTypeRepository(DefaultType), new FakeChangeNotifier()), store);
+        return (new SpoolsController(
+            store, new FakeTypeRepository(DefaultType), new FakePrintProjectRepository([]), new FakeChangeNotifier()), store);
     }
 
     [Fact]

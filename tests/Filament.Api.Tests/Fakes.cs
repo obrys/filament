@@ -65,7 +65,7 @@ public sealed class FakeTypeRepository : IFilamentTypeRepository
         Task.FromResult(_types.TryGetValue(id, out var type) ? type : null);
 
     public Task<IReadOnlyList<FilamentType>> ListAsync(CancellationToken ct = default) =>
-        throw new NotSupportedException();
+        Task.FromResult<IReadOnlyList<FilamentType>>(_types.Values.ToList());
 
     public Task AddAsync(FilamentType type, CancellationToken ct = default) =>
         throw new NotSupportedException();
@@ -77,5 +77,45 @@ public sealed class FakeTypeRepository : IFilamentTypeRepository
         throw new NotSupportedException();
 
     public Task<bool> HasSpoolsAsync(string id, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// Minimal print-project fake: a print-id → project-id map for the spool-event project-link
+/// resolution in <c>SpoolsController.Events</c>. The remaining members throw so any accidental
+/// use fails loudly.
+/// </summary>
+public sealed class FakePrintProjectRepository : IPrintProjectRepository
+{
+    private readonly Dictionary<string, string> _printToProject;
+
+    public FakePrintProjectRepository(IEnumerable<(string PrintId, string ProjectId)> links) =>
+        _printToProject = links.ToDictionary(l => l.PrintId, l => l.ProjectId);
+
+    public Task<string?> GetProjectIdByPrintIdAsync(string printId, CancellationToken ct = default) =>
+        Task.FromResult<string?>(_printToProject.TryGetValue(printId, out var project) ? project : null);
+
+    public Task<PrintProject?> GetAsync(string id, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    public Task<IReadOnlyList<PrintProject>> ListAsync(bool includeArchived, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    public Task<PrintProject> CreateAsync(PrintProject project, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    public Task<PrintProject> UpdateAsync(PrintProject project, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    public Task<PrintProject> SetArchivedAsync(string id, bool archived, DateTimeOffset at, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    public Task<bool> DeleteAsync(string id, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    public Task<ProjectPrint> PrintAsync(string projectId, IReadOnlyList<PrintSelection> selection, CancellationToken ct = default) =>
+        throw new NotSupportedException();
+
+    public Task<ProjectPrint> SetPrintEnabledAsync(string projectId, string printId, bool enabled, CancellationToken ct = default) =>
         throw new NotSupportedException();
 }

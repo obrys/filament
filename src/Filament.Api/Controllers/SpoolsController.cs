@@ -15,12 +15,15 @@ public sealed class SpoolsController : ControllerBase
 {
     private readonly ISpoolRepository _spools;
     private readonly IFilamentTypeRepository _types;
+    private readonly IPrintProjectRepository _printProjects;
     private readonly IChangeNotifier _notifier;
 
-    public SpoolsController(ISpoolRepository spools, IFilamentTypeRepository types, IChangeNotifier notifier)
+    public SpoolsController(
+        ISpoolRepository spools, IFilamentTypeRepository types, IPrintProjectRepository printProjects, IChangeNotifier notifier)
     {
         _spools = spools;
         _types = types;
+        _printProjects = printProjects;
         _notifier = notifier;
     }
 
@@ -80,7 +83,16 @@ public sealed class SpoolsController : ControllerBase
         if (spool is null) return NotFound();
         var events = await _spools.ListEventsAsync(id, ct);
         var remainingAfter = SpoolLifecycle.RunningRemaining(spool.InitialNetGrams, events);
-        return Ok(events.Select(e => e.ToDto(remainingAfter[e.Id])).ToList());
+        // Resolve the owning project of every project-linked event; an unresolvable id maps to null.
+        var projectIds = new Dictionary<string, string>();
+        foreach (var printId in events.Select(e => e.ProjectPrintId).Where(x => x is not null)!.Distinct())
+        {
+            var projectId = await _printProjects.GetProjectIdByPrintIdAsync(printId!, ct);
+            if (projectId is not null) projectIds[printId!] = projectId;
+        }
+        return Ok(events
+            .Select(e => e.ToDto(remainingAfter[e.Id], e.ProjectPrintId is null ? null : projectIds.GetValueOrDefault(e.ProjectPrintId)))
+            .ToList());
     }
 
     [HttpPost]
@@ -137,11 +149,30 @@ public sealed class SpoolsController : ControllerBase
 
     [HttpPost("{id}/events/{eventId:long}/disable")]
     public Task<ActionResult<SpoolDto>> DisableEvent(string id, long eventId, CancellationToken ct) =>
-        ApplyLifecycle(id, (_, events) => SpoolLifecycle.PlanSetEnabled(events, eventId, enabled: false), ct);
+        ApplyLifecycle(id, (_, events) =>
+        {
+            RejectProjectLinked(events, eventId);
+            return SpoolLifecycle.PlanSetEnabled(events, eventId, enabled: false);
+        }, ct);
 
     [HttpPost("{id}/events/{eventId:long}/enable")]
     public Task<ActionResult<SpoolDto>> EnableEvent(string id, long eventId, CancellationToken ct) =>
-        ApplyLifecycle(id, (_, events) => SpoolLifecycle.PlanSetEnabled(events, eventId, enabled: true), ct);
+        ApplyLifecycle(id, (_, events) =>
+        {
+            RejectProjectLinked(events, eventId);
+            return SpoolLifecycle.PlanSetEnabled(events, eventId, enabled: true);
+        }, ct);
+
+    /// <summary>
+    /// Events created by a project print are undone/redone together with the print, on the print
+    /// project page only; toggling one alone would desynchronise the print from its events.
+    /// </summary>
+    private static void RejectProjectLinked(IReadOnlyList<SpoolEvent> events, long eventId)
+    {
+        if (events.FirstOrDefault(e => e.Id == eventId)?.ProjectPrintId is not null)
+            throw new InvalidOperationException(
+                "This event belongs to a project print — undo or redo the print on the print project page.");
+    }
 
     /// <summary>
     /// Recomputes every spool's cached state and remaining weight from its enabled events, persists
@@ -190,9 +221,19 @@ public sealed class SpoolsController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(string id, CancellationToken ct)
     {
-        var removed = await _spools.DeleteAsync(id, ct);
+        bool removed;
+        try
+        {
+            removed = await _spools.DeleteAsync(id, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { error = ex.Message });
+        }
         if (!removed) return NotFound();
+        // Deleting undone project prints along with the spool changes other spools and projects too.
         await _notifier.NotifyAsync("spool", id, ct);
+        await _notifier.NotifyAsync("print-project", null, ct);
         return NoContent();
     }
 }

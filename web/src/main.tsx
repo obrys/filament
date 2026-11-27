@@ -6,12 +6,15 @@ import { FilamentTypes } from './pages/FilamentTypes'
 import { Spools } from './pages/Spools'
 import { SpoolDetail } from './pages/SpoolDetail'
 import { SpoolMaintenance } from './pages/SpoolMaintenance'
+import { PrintProjects } from './pages/PrintProjects'
+import { PrintProjectDetail } from './pages/PrintProjectDetail'
+import { PrintProjectPrint } from './pages/PrintProjectPrint'
 import { useChangeStream } from './realtime/useChangeStream'
 import { VersionGate } from './realtime/VersionGate'
 import { VersionBadge } from './components/VersionBadge'
 import { ThemeToggle } from './components/ThemeToggle'
 import { SpoolViz } from './components/SpoolViz'
-import { IconDashboard, IconSpool, IconTypes } from './components/icons'
+import { IconDashboard, IconSpool, IconTypes, IconProjects } from './components/icons'
 import './styles.css'
 
 const navClass = ({ isActive }: { isActive: boolean }) => (isActive ? 'is-active' : undefined)
@@ -30,6 +33,7 @@ function App() {
           <NavLink to="/" end className={navClass}><IconDashboard /><span>Dashboard</span></NavLink>
           <NavLink to="/types" className={navClass}><IconTypes /><span>Types</span></NavLink>
           <NavLink to="/spools" className={navClass}><IconSpool /><span>Spools</span></NavLink>
+          <NavLink to="/print-projects" className={navClass}><IconProjects /><span>Print projects</span></NavLink>
         </nav>
         <ThemeToggle />
       </header>
@@ -40,6 +44,9 @@ function App() {
           <Route path="/spools" element={<Spools />} />
           <Route path="/spools/maintenance" element={<SpoolMaintenance />} />
           <Route path="/spools/:id" element={<SpoolDetail />} />
+          <Route path="/print-projects" element={<PrintProjects />} />
+          <Route path="/print-projects/:id" element={<PrintProjectDetail />} />
+          <Route path="/print-projects/:id/print" element={<PrintProjectPrint />} />
         </Routes>
       </main>
       <VersionBadge />

@@ -72,6 +72,98 @@ namespace Filament.Infrastructure.Persistence.Migrations
                     b.ToTable("filament_types", (string)null);
                 });
 
+            modelBuilder.Entity("Filament.Infrastructure.Entities.PrintProjectEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1024)
+                        .HasColumnType("varchar(1024)");
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("varchar(256)");
+
+                    b.Property<string>("Url")
+                        .HasMaxLength(1024)
+                        .HasColumnType("varchar(1024)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("print_projects", (string)null);
+                });
+
+            modelBuilder.Entity("Filament.Infrastructure.Entities.PrintProjectTypeEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("FilamentTypeId")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("varchar(8)");
+
+                    b.Property<int>("Grams")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProjectId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FilamentTypeId");
+
+                    b.HasIndex("ProjectId", "FilamentTypeId")
+                        .IsUnique();
+
+                    b.ToTable("print_project_types", (string)null);
+                });
+
+            modelBuilder.Entity("Filament.Infrastructure.Entities.ProjectPrintEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)");
+
+                    b.Property<bool>("IsDisabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("ProjectId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId", "OccurredAt");
+
+                    b.ToTable("project_prints", (string)null);
+                });
+
             modelBuilder.Entity("Filament.Infrastructure.Entities.SpoolEntity", b =>
                 {
                     b.Property<string>("Id")
@@ -150,6 +242,10 @@ namespace Filament.Infrastructure.Persistence.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("varchar(256)");
 
+                    b.Property<string>("ProjectPrintId")
+                        .HasMaxLength(36)
+                        .HasColumnType("varchar(36)");
+
                     b.Property<string>("ProjectUrl")
                         .HasMaxLength(1024)
                         .HasColumnType("varchar(1024)");
@@ -163,9 +259,41 @@ namespace Filament.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OccurredAt");
 
+                    b.HasIndex("ProjectPrintId");
+
                     b.HasIndex("SpoolId", "OccurredAt");
 
                     b.ToTable("spool_events", (string)null);
+                });
+
+            modelBuilder.Entity("Filament.Infrastructure.Entities.PrintProjectTypeEntity", b =>
+                {
+                    b.HasOne("Filament.Infrastructure.Entities.FilamentTypeEntity", "FilamentType")
+                        .WithMany()
+                        .HasForeignKey("FilamentTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Filament.Infrastructure.Entities.PrintProjectEntity", "Project")
+                        .WithMany("Types")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FilamentType");
+
+                    b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Filament.Infrastructure.Entities.ProjectPrintEntity", b =>
+                {
+                    b.HasOne("Filament.Infrastructure.Entities.PrintProjectEntity", "Project")
+                        .WithMany("Prints")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("Filament.Infrastructure.Entities.SpoolEntity", b =>
@@ -181,11 +309,18 @@ namespace Filament.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Filament.Infrastructure.Entities.SpoolEventEntity", b =>
                 {
+                    b.HasOne("Filament.Infrastructure.Entities.ProjectPrintEntity", "ProjectPrint")
+                        .WithMany("Events")
+                        .HasForeignKey("ProjectPrintId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Filament.Infrastructure.Entities.SpoolEntity", "Spool")
                         .WithMany("Events")
                         .HasForeignKey("SpoolId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("ProjectPrint");
 
                     b.Navigation("Spool");
                 });
@@ -193,6 +328,18 @@ namespace Filament.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Filament.Infrastructure.Entities.FilamentTypeEntity", b =>
                 {
                     b.Navigation("Spools");
+                });
+
+            modelBuilder.Entity("Filament.Infrastructure.Entities.PrintProjectEntity", b =>
+                {
+                    b.Navigation("Prints");
+
+                    b.Navigation("Types");
+                });
+
+            modelBuilder.Entity("Filament.Infrastructure.Entities.ProjectPrintEntity", b =>
+                {
+                    b.Navigation("Events");
                 });
 
             modelBuilder.Entity("Filament.Infrastructure.Entities.SpoolEntity", b =>
