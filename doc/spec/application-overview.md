@@ -13,7 +13,7 @@ The intended scale is approximately 50-150 filament types, 50-300 spools, and up
 
 ## User capabilities
 
-- Create, list, filter, and delete filament types. A type cannot be deleted while any spool still references it.
+- Create, list, filter, and delete filament types. A type cannot be deleted while any spool or print project still references it.
 - Create physical spools from a type, optionally overriding its default net and empty-spool weights. New spools start sealed.
 - Open a spool; record each print with grams consumed and optional project name and URL; set the remaining amount from a measured value; and explicitly finish or reopen it.
 - Delete a spool and its event history from its detail page; the action becomes enabled only once every non-creation event of the spool has been undone.
